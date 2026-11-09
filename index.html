@@ -318,8 +318,9 @@ const TASKS = [['invoice','Invoice'],['deduction','Deduction'],['report','Monthl
 const NT = TASKS.length + 1; // 7 tick tasks + P&L
 const doneCount = (s) => TASKS.filter(([k]) => (s.tasks || {})[k] === true).length + (s.pl && s.pl.status ? 1 : 0);
 const money = (n) => 'EGP ' + Math.round(Number(n) || 0).toLocaleString('en-US');
-const canSite = (s) => S.isOwner || (!!S.myName && s.owner === S.myName);
-const canTk = (t) => S.isOwner || (!!S.myName && t.owner === S.myName);
+const isMgr = () => S.myRole === 'manager';
+const canSite = (s) => S.isOwner || isMgr() || (!!S.myName && s.owner === S.myName);
+const canTk = (t) => S.isOwner || isMgr() || (!!S.myName && t.owner === S.myName);
 const S = { members: {}, requests: {}, myName: null, sites: [], tickets: [], meta: null, owner: '', view: 'dashboard', redOnly: false, st: 'open', overdue: false, cust: false, q: '', db: null, user: null, me: null, isOwner: false, canWrite: true, names: {} };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -369,7 +370,7 @@ function renderWho() {
   const box = $('who');
   if (S.isOwner || !S.me || !S.sites.length) { box.hidden = true; return; }
   box.hidden = false;
-  if (S.myName) { box.innerHTML = `You are signed in as <b>${esc(S.myName)}</b>. You can tick tasks, set P&amp;L and close tickets on your own sites. Other sites are view only.`; return; }
+  if (S.myName) { box.innerHTML = isMgr() ? `You are signed in as <b>${esc(S.myName)}</b> (manager). You can tick tasks, set P&amp;L and close tickets on every site.` : `You are signed in as <b>${esc(S.myName)}</b>. You can tick tasks, set P&amp;L and close tickets on your own sites. Other sites are view only.`; return; }
   const r = S.requests[S.me];
   if (r) { box.innerHTML = `Waiting for Ahmed to approve you as <b>${esc(r.name)}</b>. You can look around, but ticking is off until he approves.`; return; }
   const names = [...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort();
@@ -390,7 +391,7 @@ async function renderTeam() {
   const focusFor = document.activeElement?.dataset?.invfor;
   const keepAdm = $('admemail')?.value || '', admFocus = document.activeElement?.id === 'admemail';
   box.innerHTML = `<h2>Team access</h2><p class="sub">Only owners see this. Invite people by email below, or send them this website link or the Android app; they sign in with Google, pick their name and appear here. Check the name and email, then approve. Each person can tick only the sites they own.</p>
-    ${req.length ? `<div class="bdgrp"><h3>Waiting for approval</h3>${req.map(([id, r]) => `<div class="bdrow"><span>${who(id)} says they are <b>${esc(r.name)}</b></span><span class="toolbar"><button class="btn primary" data-appr="${esc(id)}">Approve</button><button class="btn" data-rej="${esc(id)}">Reject</button></span></div>`).join('')}</div>` : ''}
+    ${req.length ? `<div class="bdgrp"><h3>Waiting for approval</h3>${req.map(([id, r]) => `<div class="bdrow"><span>${who(id)} says they are <b>${esc(r.name)}</b>${r.role === 'manager' ? ' · <b>Manager</b>' : ''}</span><span class="toolbar"><button class="btn primary" data-appr="${esc(id)}">Approve</button><button class="btn" data-rej="${esc(id)}">Reject</button></span></div>`).join('')}</div>` : ''}
     <div class="bdgrp"><h3>Super users</h3>
       <p class="small" style="margin:4px 0 4px">Same full access as you: every site and ticket, team access, ERP import and new month.${S.isPrimary ? '' : ' Only the main owner can change this list.'}</p>
       ${((S.config && S.config.admins) || []).map((em) => `<div class="bdrow"><span>${esc(em)}</span>${S.isPrimary ? `<button class="btn" data-admrem="${esc(em)}">Remove</button>` : '<span></span>'}</div>`).join('') || '<div class="small" style="padding:6px 0">No super users yet.</div>'}
@@ -407,7 +408,7 @@ async function renderTeam() {
           : `<div class="bdrow"><span><b>${esc(n)}</b> <span class="small">· ${sites} sites</span></span><span></span><span class="toolbar" style="grid-column:1/-1"><input class="search" type="email" data-invfor="${esc(n)}" placeholder="${esc(n.toLowerCase())}@company.com" aria-label="Official email for ${esc(n)}" style="flex:1 1 220px"><button class="btn primary" data-invadd="${esc(n)}">Invite</button></span></div>`;
       }).join('')}
     </div>
-    <div class="bdgrp"><h3>Approved</h3>${mem.length ? mem.map(([id, m]) => `<div class="bdrow"><span>${who(id)} · ticks for <b>${esc(m.name)}</b></span><button class="btn" data-rem="${esc(id)}">Remove</button></div>`).join('') : '<div class="small" style="padding:8px 0">No one approved yet.</div>'}</div>`;
+    <div class="bdgrp"><h3>Approved</h3>${mem.length ? mem.map(([id, m]) => `<div class="bdrow"><span>${who(id)} · ${m.role === 'manager' ? '<b>Manager</b> — ticks for everyone' : `ticks for <b>${esc(m.name)}</b>`}</span><button class="btn" data-rem="${esc(id)}">Remove</button></div>`).join('') : '<div class="small" style="padding:8px 0">No one approved yet.</div>'}</div>`;
   if ($('admemail')) { $('admemail').value = keepAdm; if (admFocus) $('admemail').focus(); }
   document.querySelectorAll('[data-invfor]').forEach((x) => { if (keep[x.dataset.invfor]) x.value = keep[x.dataset.invfor]; if (x.dataset.invfor === focusFor) x.focus(); });
 }
@@ -436,7 +437,8 @@ $('team').addEventListener('click', async (e) => {
     if (a) { const id = a.dataset.appr; const name = S.requests[id]?.name; if (!name) return; a.disabled = true;
       const clash = Object.entries(S.members).find(([i, v]) => v.name === name && i !== id);
       if (clash) await S.db.doc('members/' + clash[0]).delete();
-      await S.db.doc('members/' + id).set({ name, approvedAt: new Date().toISOString() }); await S.db.doc('requests/' + id).delete(); toast('Approved as ' + name); }
+      const role = S.requests[id]?.role === 'manager' ? 'manager' : 'team';
+      await S.db.doc('members/' + id).set({ name, role, email: S.requests[id]?.email || null, approvedAt: new Date().toISOString() }); await S.db.doc('requests/' + id).delete(); toast('Approved ' + name + (role === 'manager' ? ' as manager' : '')); }
     else if (r) { r.disabled = true; await S.db.doc('requests/' + r.dataset.rej).delete(); toast('Request rejected'); }
     else if (m) { m.disabled = true; await S.db.doc('members/' + m.dataset.rem).delete(); toast('Access removed'); }
   } catch (er) { toast('Could not save. Try again.'); }
@@ -471,7 +473,7 @@ function renderRecent() {
   if (!items.length) { $('recent').innerHTML = '<div class="empty">No ticks in this period. When someone ticks a task or closes a ticket, it shows here with the date and time.</div>'; return; }
   $('recent').innerHTML = items.map((x) => `<div class="rec">
     <div class="what">${x.kind !== 'ticket' ? `<span class="chip k">${x.kind === 'pl' ? 'P&amp;L' : 'Task'}</span>${esc(x.label)} · ${esc(x.site)}` : `<span class="chip k">Ticket</span><code style="font-family:var(--f-code);font-size:12.5px">${esc(x.code)}</code> closed · ${esc(x.site)}`}</div>
-    <button class="btn" data-undo="${x.kind}" data-id="${esc(x.id)}" data-key="${esc(x.key || '')}" ${(S.isOwner || (!!S.myName && x.owner === S.myName)) ? '' : 'disabled'}>${({ task: 'Untick', pl: 'Clear', ticket: 'Reopen' })[x.kind]}</button>
+    <button class="btn" data-undo="${x.kind}" data-id="${esc(x.id)}" data-key="${esc(x.key || '')}" ${(S.isOwner || isMgr() || (!!S.myName && x.owner === S.myName)) ? '' : 'disabled'}>${({ task: 'Untick', pl: 'Clear', ticket: 'Reopen' })[x.kind]}</button>
     <div class="when">${esc(fmtDT(x.at))} · by ${whoSpan(x.by)} · ${esc(x.owner)}</div></div>`).join('');
   resolveNames([...new Set(items.map((x) => x.by).filter(Boolean))]);
 }
@@ -1033,7 +1035,18 @@ gate.addEventListener('click', async (e) => {
       catch (er) { if (er?.code === 'auth/popup-blocked' || er?.code === 'auth/operation-not-supported-in-this-environment') await signInWithRedirect(auth, p); else throw er; }
     } else if (b.dataset.g === 'out') await signOut(auth);
     else if (b.dataset.g === 'own') await setDoc(doc(fs, 'config/app'), { ownerUid: u.uid, ownerName: u.displayName || u.email, names: [] });
-    else if (b.dataset.g === 'claim') await setDoc(doc(fs, 'requests/' + u.uid), { name: b.dataset.name, accountName: u.displayName || null, email: u.email || null, at: new Date().toISOString() });
+    else if (b.dataset.g === 'role') {
+      gate.querySelectorAll('[data-g="role"]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      $('rolehelp').textContent = b.dataset.role === 'manager' ? 'Manager: view everything and tick for any team member.' : 'Team member: view everything, tick your own sites.';
+      b.disabled = false; return;
+    }
+    else if (b.dataset.g === 'claimown') {
+      const name = ($('gname')?.value || '').trim();
+      if (!name) { b.disabled = false; $('gname')?.focus(); return; }
+      const role = gate.querySelector('[data-g="role"][aria-pressed="true"]')?.dataset.role === 'manager' ? 'manager' : 'team';
+      await setDoc(doc(fs, 'requests/' + u.uid), { name, role, accountName: u.displayName || null, email: u.email || null, at: new Date().toISOString() });
+    }
+    else if (b.dataset.g === 'claim') await setDoc(doc(fs, 'requests/' + u.uid), { name: b.dataset.name, role: 'team', accountName: u.displayName || null, email: u.email || null, at: new Date().toISOString() });
     else if (b.dataset.g === 'cancel') await deleteDoc(doc(fs, 'requests/' + u.uid));
   } catch (er) {
     b.disabled = false;
@@ -1050,7 +1063,7 @@ $('signout').addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, (user) => {
   off(subs); off(roleSubs);
-  Object.assign(S, { sites: [], tickets: [], members: {}, requests: {}, isOwner: false, myName: null, me: null, db: null, user: null });
+  Object.assign(S, { sites: [], tickets: [], members: {}, requests: {}, isOwner: false, myName: null, myRole: null, me: null, db: null, user: null });
   if (!user) {
     showGate('<p>Tick monthly tasks, follow tickets and spot red sites, together with your team. Same live data as the Android app.</p><button class="btn primary" data-g="in">Sign in with Google</button><a class="btn" href="RedFlagTracker.apk">Get the Android app</a>');
     return;
@@ -1095,7 +1108,14 @@ function becomeOwner(user) {
 function claimGate() {
   const names = CONFIG?.names || [];
   showGate('<p><b>Who are you?</b> Pick your name. The owner approves it, then you can tick on your own sites.</p>' +
-    (names.length ? `<div class="names">${names.map((n) => `<button class="btn" data-g="claim" data-name="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : '<p class="small">The owner has not added any sites yet.</p>') + acct());
+    (names.length ? `<div class="names">${names.map((n) => `<button class="btn" data-g="claim" data-name="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : '') +
+    `<details style="text-align:left"><summary style="cursor:pointer;font-weight:600">My name isn't listed</summary>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+        <label for="gname" class="small">Your name</label><input id="gname" class="search" maxlength="60" placeholder="Your full name" style="flex:none">
+        <div class="seg" role="group" aria-label="Role" style="align-self:flex-start"><button type="button" data-g="role" data-role="team" aria-pressed="true">Team member</button><button type="button" data-g="role" data-role="manager" aria-pressed="false">Manager</button></div>
+        <p class="small" style="margin:0" id="rolehelp">Team member: view everything, tick your own sites.</p>
+        <button class="btn primary" data-g="claimown">Ask for access</button>
+      </div></details>` + acct());
 }
 
 function watchMembership(user) {
@@ -1106,7 +1126,7 @@ function watchMembership(user) {
     if (name) {
       if (reqSub) { reqSub(); reqSub = null; }
       const first = !S.myName;
-      S.myName = name; ME.name = name; KNOWN[user.uid] = name;
+      S.myName = name; S.myRole = m.data().role || 'team'; ME.name = name; KNOWN[user.uid] = name;
       if (first) { let saved = ''; try { saved = localStorage.getItem('rf.owner') || ''; } catch (e) {} if (!saved) S.owner = name; }
       startData(); showMain(); render();
     } else {
@@ -1121,7 +1141,7 @@ function watchMembership(user) {
       if (!reqSub) {
         reqSub = onSnapshot(doc(fs, 'requests/' + user.uid), (r) => {
           S.requests = r.exists() ? { [user.uid]: r.data() } : {};
-          if (r.exists()) showGate(`<p>You asked to join as <b>${esc(r.data().name)}</b>. The tracker opens as soon as the owner approves you.</p><button class="btn" data-g="cancel">I picked the wrong name</button>` + acct());
+          if (r.exists()) showGate(`<p>You asked to join as <b>${esc(r.data().name)}</b>${r.data().role === 'manager' ? ' (manager)' : ''}. The tracker opens as soon as the owner approves you.</p><button class="btn" data-g="cancel">I picked the wrong name</button>` + acct());
           else claimGate();
         });
         roleSubs.push(reqSub);

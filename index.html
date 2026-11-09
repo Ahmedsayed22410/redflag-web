@@ -388,8 +388,14 @@ async function renderTeam() {
   box.hidden = false;
   const keep = Object.fromEntries([...document.querySelectorAll('[data-invfor]')].map((x) => [x.dataset.invfor, x.value]));
   const focusFor = document.activeElement?.dataset?.invfor;
-  box.innerHTML = `<h2>Team access</h2><p class="sub">Only you see this. Invite people by email below, or send them this website link or the Android app; they sign in with Google, pick their name and appear here. Check the name and email, then approve. Each person can tick only the sites they own.</p>
+  const keepAdm = $('admemail')?.value || '', admFocus = document.activeElement?.id === 'admemail';
+  box.innerHTML = `<h2>Team access</h2><p class="sub">Only owners see this. Invite people by email below, or send them this website link or the Android app; they sign in with Google, pick their name and appear here. Check the name and email, then approve. Each person can tick only the sites they own.</p>
     ${req.length ? `<div class="bdgrp"><h3>Waiting for approval</h3>${req.map(([id, r]) => `<div class="bdrow"><span>${who(id)} says they are <b>${esc(r.name)}</b></span><span class="toolbar"><button class="btn primary" data-appr="${esc(id)}">Approve</button><button class="btn" data-rej="${esc(id)}">Reject</button></span></div>`).join('')}</div>` : ''}
+    <div class="bdgrp"><h3>Super users</h3>
+      <p class="small" style="margin:4px 0 4px">Same full access as you: every site and ticket, team access, ERP import and new month.${S.isPrimary ? '' : ' Only the main owner can change this list.'}</p>
+      ${((S.config && S.config.admins) || []).map((em) => `<div class="bdrow"><span>${esc(em)}</span>${S.isPrimary ? `<button class="btn" data-admrem="${esc(em)}">Remove</button>` : '<span></span>'}</div>`).join('') || '<div class="small" style="padding:6px 0">No super users yet.</div>'}
+      ${S.isPrimary ? `<div class="toolbar" style="margin-top:6px"><input class="search" type="email" id="admemail" placeholder="name@company.com" aria-label="Super user email" style="flex:1 1 220px"><button class="btn primary" data-admadd>Add super user</button></div>` : ''}
+    </div>
     <div class="bdgrp"><h3>Invite your team</h3>
       <p class="small" style="margin:4px 0 4px">Type each person's official email and tap Invite. When they sign in with that email they can tick their own sites straight away and see everyone else's updates.</p>
       ${[...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort().map((n) => {
@@ -402,6 +408,7 @@ async function renderTeam() {
       }).join('')}
     </div>
     <div class="bdgrp"><h3>Approved</h3>${mem.length ? mem.map(([id, m]) => `<div class="bdrow"><span>${who(id)} · ticks for <b>${esc(m.name)}</b></span><button class="btn" data-rem="${esc(id)}">Remove</button></div>`).join('') : '<div class="small" style="padding:8px 0">No one approved yet.</div>'}</div>`;
+  if ($('admemail')) { $('admemail').value = keepAdm; if (admFocus) $('admemail').focus(); }
   document.querySelectorAll('[data-invfor]').forEach((x) => { if (keep[x.dataset.invfor]) x.value = keep[x.dataset.invfor]; if (x.dataset.invfor === focusFor) x.focus(); });
 }
 $('who').addEventListener('click', async (e) => {
@@ -414,7 +421,12 @@ $('team').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target
 $('team').addEventListener('click', async (e) => {
   const a = e.target.closest('[data-appr]'), r = e.target.closest('[data-rej]'), m = e.target.closest('[data-rem]');
   const ia = e.target.closest('[data-invadd]'), ir = e.target.closest('[data-invrem]');
+  const aa = e.target.closest('[data-admadd]'), ar = e.target.closest('[data-admrem]');
   try {
+    if (aa) { const em = ($('admemail')?.value || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { toast('Type a full email, for example name@company.com'); $('admemail')?.focus(); return; }
+      aa.disabled = true; await window.rfAdmins.add(em); toast(em + ' is now a super user. They sign in with Google using this email.'); return; }
+    if (ar) { ar.disabled = true; await window.rfAdmins.remove(ar.dataset.admrem); toast('Super user removed'); return; }
     if (ia) { const name = ia.dataset.invadd, box = document.querySelector(`[data-invfor="${CSS.escape(name)}"]`), email = (box?.value || '').trim();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Type a full email, for example ' + name.toLowerCase() + '@company.com'); box?.focus(); return; }
       ia.disabled = true;
@@ -873,7 +885,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc,
+  doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, arrayUnion, arrayRemove,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const app = initializeApp({
@@ -1048,7 +1060,10 @@ onAuthStateChanged(auth, (user) => {
   let role = null;
   roleSubs.push(onSnapshot(doc(fs, 'config/app'), (c) => {
     CONFIG = c.exists() ? c.data() : null;
-    const next = !CONFIG ? 'none' : CONFIG.ownerUid === user.uid ? 'owner' : 'other';
+    S.config = CONFIG; S.isPrimary = !!CONFIG && CONFIG.ownerUid === user.uid;
+    const isAdmin = !!CONFIG && !!user.email && (CONFIG.admins || []).includes(user.email.toLowerCase());
+    const next = !CONFIG ? 'none' : (S.isPrimary || isAdmin) ? 'owner' : 'other';
+    if (next === role && role === 'owner') render();
     if (next === role) { if (role === 'other' && !S.myName && !S.requests[user.uid]) claimGate(); return; }
     role = next;
     roleSubs.splice(1).forEach((u) => u());
@@ -1058,6 +1073,11 @@ onAuthStateChanged(auth, (user) => {
     else watchMembership(user);
   }, () => showGate('<p class="err">Could not reach the tracker. Check your connection and reload.</p>' + acct())));
 });
+
+window.rfAdmins = {
+  add: (email) => updateDoc(doc(fs, 'config/app'), { admins: arrayUnion(email.trim().toLowerCase()) }).catch(mapErr),
+  remove: (email) => updateDoc(doc(fs, 'config/app'), { admins: arrayRemove(email) }).catch(mapErr),
+};
 
 function becomeOwner(user) {
   S.isOwner = true; ME.name = user.displayName || user.email || 'Owner';

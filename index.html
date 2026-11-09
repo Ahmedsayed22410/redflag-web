@@ -59,6 +59,9 @@ main { padding-block: 20px 48px; display: flex; flex-direction: column; gap: 20p
 .kpi .note { color: var(--muted); font-size: 12.5px; }
 .kpi .note { background: none; padding: 0; border-radius: 0; }
 .kpi[data-bd] { cursor: pointer; }
+[data-bdk] { cursor: pointer; border-radius: 8px; } [data-bdk]:hover { background: var(--sunken); }
+[data-bdk].active { background: var(--sunken); box-shadow: inset 3px 0 0 var(--accent); }
+.ownrow[data-bdk], .theme[data-bdk] { padding-left: 6px; padding-right: 6px; }
 .kpi[data-bd] .lbl::after { content: "  ›"; }
 .kpi[data-bd]:hover { border-color: var(--accent); }
 .kpi.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -258,8 +261,9 @@ body.gated header.bar, body.gated main, body.gated #backbar { display: none !imp
     <div class="grid2" style="margin-top:20px">
       <div class="card"><h2>Needs attention</h2><p class="sub">Red sites and why. Tap one to open it.</p><div class="attn" id="attn"><div class="empty">Sites appear here once data loads.</div></div></div>
       <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
-        <div class="card"><h2>By owner</h2><p class="sub">Tasks done this month and tickets closed.</p><div id="owners"></div></div>
-        <div class="card"><h2>Repeated issues</h2><p class="sub">Tickets by theme, with how many are still open.</p><div id="themes"></div></div>
+        <div class="card"><h2>By owner</h2><p class="sub">Tasks done this month and tickets closed. Tap a name for their sites and tickets.</p><div id="owners"></div></div>
+        <div class="card"><h2>Repeated issues</h2><p class="sub">Tickets by theme, with how many are still open. Tap one to see them.</p><div id="themes"></div></div>
+        <div class="card"><h2>By department</h2><p class="sub">Open tickets per department (HR, Operation, Warehouses…). Tap one to see them.</p><div id="depts"></div></div>
       </div>
     </div>
     <div class="card" id="team" hidden style="margin-top:20px"></div>
@@ -562,7 +566,7 @@ function renderDashboard() {
     const d = os.reduce((n, s) => n + doneCount(s), 0);
     const a = pct(d, os.length * NT), b = pct(ot.filter((t) => t.closed).length, ot.length);
     const od = ot.filter(isOverdue).length;
-    return `<div class="ownrow"><span class="nm">${esc(o)}<br><span class="small">${os.length} sites${od ? ` · <span style="color:var(--red)">${od} overdue</span>` : ''}</span></span>
+    return `<div class="ownrow" data-bdk="owner:${esc(o)}" role="button" tabindex="0" aria-label="Details for ${esc(o)}"><span class="nm">${esc(o)}<br><span class="small">${os.length} sites${od ? ` · <span style="color:var(--red)">${od} overdue</span>` : ''}</span></span>
       ${meter(a) || '<span></span>'}<span class="pc">${a ?? '—'}%</span><span class="lab">Tasks done</span>
       <span></span>${meter(b) || '<div class="small">No tickets</div>'}<span class="pc">${b === null ? '—' : b + '%'}</span><span class="lab">Tickets closed</span></div>`;
   }).join('');
@@ -571,13 +575,20 @@ function renderDashboard() {
   for (const t of tk) { const k = t.theme || 'Not set'; themes[k] = themes[k] || { n: 0, open: 0 }; themes[k].n++; if (!t.closed) themes[k].open++; }
   const list = Object.entries(themes).sort((a, b) => b[1].n - a[1].n);
   const max = list.length ? list[0][1].n : 1;
-  $('themes').innerHTML = list.length ? list.map(([k, v]) => `<div class="theme"><div class="top"><span>${esc(k)}</span><span>${v.n} tickets · <span style="color:${v.open ? 'var(--red)' : 'var(--muted)'}">${v.open} open</span></span></div><div class="meter ${v.open ? 'red' : ''}"><i style="width:${Math.round(v.n / max * 100)}%; ${v.open ? '' : 'background:var(--grey)'}"></i></div></div>`).join('') : '<div class="empty">No tickets yet.</div>';
+  $('themes').innerHTML = list.length ? list.map(([k, v]) => `<div class="theme" data-bdk="theme:${esc(k)}" role="button" tabindex="0" aria-label="Tickets about ${esc(k)}"><div class="top"><span>${esc(k)}</span><span>${v.n} tickets · <span style="color:${v.open ? 'var(--red)' : 'var(--muted)'}">${v.open} open</span></span></div><div class="meter ${v.open ? 'red' : ''}"><i style="width:${Math.round(v.n / max * 100)}%; ${v.open ? '' : 'background:var(--grey)'}"></i></div></div>`).join('') : '<div class="empty">No tickets yet.</div>';
+
+  const depts = {};
+  for (const t of tk) { const k = (t.department || '').trim() || 'Not set'; depts[k] = depts[k] || { n: 0, open: 0, late: 0 }; depts[k].n++; if (!t.closed) depts[k].open++; if (isOverdue(t)) depts[k].late++; }
+  const dl = Object.entries(depts).sort((a, b) => b[1].open - a[1].open || b[1].n - a[1].n);
+  const dmax = Math.max(1, ...dl.map(([, v]) => v.open));
+  $('depts').innerHTML = dl.length ? dl.map(([k, v]) => `<div class="theme" data-bdk="dept:${esc(k)}" role="button" tabindex="0" aria-label="Tickets for ${esc(k)}"><div class="top"><span>${esc(k.replace(/ Department$/, ''))}</span><span><b style="color:${v.open ? 'var(--red)' : 'var(--muted)'}">${v.open} open</b>${v.late ? ` · <span style="color:var(--red)">${v.late} overdue</span>` : ''} · ${v.n} total</span></div><div class="meter ${v.open ? 'red' : ''}"><i style="width:${Math.round(v.open / dmax * 100)}%; ${v.open ? '' : 'background:var(--grey)'}"></i></div></div>`).join('') : '<div class="empty">No tickets yet.</div>';
 }
 
 let BD = null;
 function renderBreakdown() {
   const box = $('bd');
   document.querySelectorAll('.kpi[data-bd]').forEach((k) => { k.classList.toggle('active', k.dataset.bd === BD); k.setAttribute('aria-expanded', String(k.dataset.bd === BD)); });
+  document.querySelectorAll('[data-bdk]').forEach((k) => k.classList.toggle('active', k.dataset.bdk === BD));
   if (!BD || !S.sites.length) { box.hidden = true; return; }
   const sites = S.sites.filter((s) => ownerOk(s.owner));
   const stats = sites.map((s) => ({ s, ...siteStats(s) }));
@@ -627,6 +638,25 @@ function renderBreakdown() {
     const bySite = {}; for (const t of tk) if (t.raisedBy !== 'Customer' && t.type === 'Complaint') { const k = t.site; bySite[k] = bySite[k] || { n: 0, open: 0 }; bySite[k].n++; if (!t.closed) bySite[k].open++; }
     const ints = Object.entries(bySite).sort((a, b) => b[1].n - a[1].n).map(([site, v]) => `<div ${rowOpen(site)}><span>${link({ site })} <span class="small">· ${esc(sites.find((s) => s.site === site)?.owner || '')}</span></span><span class="num">${v.n} complaint${v.n === 1 ? '' : 's'}</span>${v.open ? `<span class="s r">${v.open} still open</span>` : ''}</div>`);
     body = group(`Raised by customers (${cust.length})`, cust.map(tRow)) + group('Internal complaints by site', ints) + `<div class="bdfoot"><button class="btn" data-goto="cust">Open customer tickets in Tickets</button></div>`;
+  }
+  if (BD.startsWith('owner:')) {
+    const o = BD.slice(6); title = o + ' — sites and tickets';
+    const os = stats.filter((x) => x.s.owner === o);
+    const ot = S.tickets.filter((t) => t.owner === o), open = ot.filter((t) => !t.closed).sort((a, b) => String(a.target).localeCompare(String(b.target)));
+    const d = os.reduce((n, x) => n + doneCount(x.s), 0), tp = pct(d, os.length * NT), cp = pct(ot.filter((t) => t.closed).length, ot.length);
+    body = `<p class="small" style="margin:8px 0 0">${os.length} sites · tasks done ${tp ?? '—'}% · tickets closed ${cp ?? '—'}% · ${open.length} open · ${ot.filter(isOverdue).length} overdue</p>` +
+      group('Sites', os.map((x) => `<div ${rowOpen(x.s.site)}><span>${link(x.s)}</span><span class="pill ${x.flag}">${x.flag[0].toUpperCase() + x.flag.slice(1)}</span><span class="s">${doneCount(x.s)}/${NT} tasks · ${x.open.length} open ticket${x.open.length === 1 ? '' : 's'}${x.why.length ? ' · ' + esc(x.why.join(' · ')) : ''}</span></div>`)) +
+      (open.length ? group(`Open tickets (${open.length})`, open.map(tRow)) : '<div class="bdgrp"><h3>Open tickets</h3><div class="small" style="padding:6px 0">None open.</div></div>');
+  } else if (BD.startsWith('theme:') || BD.startsWith('dept:')) {
+    const isT = BD.startsWith('theme:'), key = BD.slice(isT ? 6 : 5);
+    const list = tk.filter((t) => isT ? (t.theme || 'Not set') === key : ((t.department || '').trim() || 'Not set') === key)
+      .sort((a, b) => (a.closed - b.closed) || String(a.target).localeCompare(String(b.target)));
+    const open = list.filter((t) => !t.closed), closed = list.filter((t) => t.closed);
+    const bySite = {}; for (const t of open) bySite[t.site] = (bySite[t.site] || 0) + 1;
+    title = (isT ? 'Repeated issue: ' : 'Department: ') + key;
+    body = `<p class="small" style="margin:8px 0 0">${list.length} tickets · ${open.length} open · ${list.filter(isOverdue).length} overdue${Object.keys(bySite).length ? ' · open at ' + Object.entries(bySite).sort((a, b) => b[1] - a[1]).map(([k, n]) => esc(k) + ' (' + n + ')').join(', ') : ''}</p>` +
+      (open.length ? group(`Open (${open.length})`, open.map(tRow)) : '<div class="bdgrp"><h3>Open</h3><div class="small" style="padding:6px 0">None open.</div></div>') +
+      (closed.length ? group(`Closed (${closed.length})`, closed.slice(0, 50).map(tRow)) : '');
   }
   box.innerHTML = `<div class="bdhead"><h2>${esc(title)}</h2><button class="btn" data-bdclose>Close</button></div>${body}`;
   box.hidden = false;
@@ -754,6 +784,11 @@ $('attn').addEventListener('click', (e) => { const b = e.target.closest('[data-o
 $('tickets').addEventListener('click', (e) => { const d = e.target.closest('.desc'); if (d) d.classList.toggle('open'); });
 const pickBd = (el) => { if (!el) return; BD = BD === el.dataset.bd ? null : el.dataset.bd; renderBreakdown(); if (BD) $('bd').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
 $('kpis').addEventListener('click', (e) => pickBd(e.target.closest('.kpi[data-bd]')));
+const pickRow = (el) => { if (!el) return; BD = BD === el.dataset.bdk ? null : el.dataset.bdk; renderBreakdown(); if (BD) $('bd').scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
+for (const id of ['owners', 'themes', 'depts']) {
+  $(id).addEventListener('click', (e) => pickRow(e.target.closest('[data-bdk]')));
+  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const r = e.target.closest('[data-bdk]'); if (r) { e.preventDefault(); pickRow(r); } } });
+}
 $('kpis').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const k = e.target.closest('.kpi[data-bd]'); if (k) { e.preventDefault(); pickBd(k); } } });
 const press = (id, v) => $(id).setAttribute('aria-pressed', String(v));
 $('bd').addEventListener('keydown', (e) => {

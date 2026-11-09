@@ -386,19 +386,23 @@ async function renderTeam() {
   if (seq !== teamSeq) return;
   const who = (id) => { const p = ps[id] || {}; return `<b>${esc(p.name || 'Unnamed account')}</b>${p.email ? ` <span class="small">${esc(p.email)}</span>` : ''}`; };
   box.hidden = false;
-  const keepE = $('invemail')?.value || '', keepN = $('invname')?.value || '', hadFocus = document.activeElement?.id === 'invemail';
+  const keep = Object.fromEntries([...document.querySelectorAll('[data-invfor]')].map((x) => [x.dataset.invfor, x.value]));
+  const focusFor = document.activeElement?.dataset?.invfor;
   box.innerHTML = `<h2>Team access</h2><p class="sub">Only you see this. Invite people by email below, or send them this website link or the Android app; they sign in with Google, pick their name and appear here. Check the name and email, then approve. Each person can tick only the sites they own.</p>
     ${req.length ? `<div class="bdgrp"><h3>Waiting for approval</h3>${req.map(([id, r]) => `<div class="bdrow"><span>${who(id)} says they are <b>${esc(r.name)}</b></span><span class="toolbar"><button class="btn primary" data-appr="${esc(id)}">Approve</button><button class="btn" data-rej="${esc(id)}">Reject</button></span></div>`).join('')}</div>` : ''}
-    <div class="bdgrp"><h3>Invite by official email</h3>
-      <p class="small" style="margin:4px 0 8px">Pick the person's name and type their official email. When they sign in with that email they get in straight away, no approval needed.</p>
-      <div class="toolbar"><select class="ownersel" id="invname" aria-label="Name">${[...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort().map((n) => `<option>${esc(n)}</option>`).join('')}</select>
-      <input class="search" id="invemail" type="email" placeholder="name@company.com" aria-label="Official email" style="flex:1 1 220px">
-      <button class="btn primary" data-invadd>Add invite</button></div>
-      ${Object.values(S.invites || {}).sort((a, b) => a.name.localeCompare(b.name)).map((v) => { const joined = mem.find(([, m]) => (m.email || '').toLowerCase() === v.email.toLowerCase());
-        return `<div class="bdrow"><span><b>${esc(v.name)}</b> <span class="small">${esc(v.email)}</span><br><span class="small" style="color:${joined ? 'var(--green)' : 'var(--amber)'}">${joined ? 'Joined' : 'Not signed in yet'}</span></span><span class="toolbar"><a class="btn" href="${esc(inviteMail(v))}">Send email</a><button class="btn" data-invrem="${esc(v.email.toLowerCase())}">Remove</button></span></div>`; }).join('')}
+    <div class="bdgrp"><h3>Invite your team</h3>
+      <p class="small" style="margin:4px 0 4px">Type each person's official email and tap Invite. When they sign in with that email they can tick their own sites straight away and see everyone else's updates.</p>
+      ${[...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort().map((n) => {
+        const v = Object.values(S.invites || {}).find((x) => x.name === n);
+        const joined = v && mem.find(([, m]) => (m.email || '').toLowerCase() === v.email.toLowerCase());
+        const sites = S.sites.filter((s) => s.owner === n).length;
+        return v
+          ? `<div class="bdrow"><span><b>${esc(n)}</b> <span class="small">· ${sites} sites</span><br><span class="small">${esc(v.email)}</span> · <span class="small" style="color:${joined ? 'var(--green)' : 'var(--amber)'}">${joined ? 'Joined' : 'Invited, not signed in yet'}</span></span><span class="toolbar"><a class="btn" href="${esc(inviteMail(v))}">Send email</a><button class="btn" data-invrem="${esc(v.email.toLowerCase())}">Remove</button></span></div>`
+          : `<div class="bdrow"><span><b>${esc(n)}</b> <span class="small">· ${sites} sites</span></span><span></span><span class="toolbar" style="grid-column:1/-1"><input class="search" type="email" data-invfor="${esc(n)}" placeholder="${esc(n.toLowerCase())}@company.com" aria-label="Official email for ${esc(n)}" style="flex:1 1 220px"><button class="btn primary" data-invadd="${esc(n)}">Invite</button></span></div>`;
+      }).join('')}
     </div>
     <div class="bdgrp"><h3>Approved</h3>${mem.length ? mem.map(([id, m]) => `<div class="bdrow"><span>${who(id)} · ticks for <b>${esc(m.name)}</b></span><button class="btn" data-rem="${esc(id)}">Remove</button></div>`).join('') : '<div class="small" style="padding:8px 0">No one approved yet.</div>'}</div>`;
-  if ($('invemail')) { $('invemail').value = keepE; if (keepN) $('invname').value = keepN; if (hadFocus) $('invemail').focus(); }
+  document.querySelectorAll('[data-invfor]').forEach((x) => { if (keep[x.dataset.invfor]) x.value = keep[x.dataset.invfor]; if (x.dataset.invfor === focusFor) x.focus(); });
 }
 $('who').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-claim]'); if (!b || !S.db || !S.me) return;
@@ -406,15 +410,15 @@ $('who').addEventListener('click', async (e) => {
   try { await S.db.doc('requests/' + S.me).set({ name: b.dataset.claim, at: new Date().toISOString() }); toast('Sent. Ahmed will approve you.'); }
   catch (er) { b.disabled = false; toast('Could not send. Ask Ahmed to check that you were invited as Editor.'); }
 });
+$('team').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.dataset?.invfor) { e.preventDefault(); document.querySelector(`[data-invadd="${CSS.escape(e.target.dataset.invfor)}"]`)?.click(); } });
 $('team').addEventListener('click', async (e) => {
   const a = e.target.closest('[data-appr]'), r = e.target.closest('[data-rej]'), m = e.target.closest('[data-rem]');
   const ia = e.target.closest('[data-invadd]'), ir = e.target.closest('[data-invrem]');
   try {
-    if (ia) { const email = $('invemail').value.trim(), name = $('invname').value;
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Type a full email, for example hala@company.com'); $('invemail').focus(); return; }
-      ia.disabled = true; $('invemail').value = '';
-      try { await S.db.doc('invites/' + email.toLowerCase()).set({ name, email, invitedAt: new Date().toISOString() }); }
-      catch (er) { if ($('invemail')) $('invemail').value = email; ia.disabled = false; throw er; }
+    if (ia) { const name = ia.dataset.invadd, box = document.querySelector(`[data-invfor="${CSS.escape(name)}"]`), email = (box?.value || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Type a full email, for example ' + name.toLowerCase() + '@company.com'); box?.focus(); return; }
+      ia.disabled = true;
+      await S.db.doc('invites/' + email.toLowerCase()).set({ name, email, invitedAt: new Date().toISOString() });
       toast('Invite added for ' + name + '. Tap Send email to let them know.'); return; }
     if (ir) { ir.disabled = true; await S.db.doc('invites/' + ir.dataset.invrem).delete(); toast('Invite removed'); return; }
     if (a) { const id = a.dataset.appr; const name = S.requests[id]?.name; if (!name) return; a.disabled = true;

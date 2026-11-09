@@ -185,12 +185,21 @@ main { padding-block: 20px 48px; display: flex; flex-direction: column; gap: 20p
 .plamt label { font-size: 13px; font-weight: 500; }
 .plamt input { width: 140px; max-width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 10px; font-variant-numeric: tabular-nums; }
 .recent { display: flex; flex-direction: column; }
-.rec { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 2px 12px; align-items: center; padding: 12px 4px; border-top: 1px solid var(--line); }
+.rec { padding: 4px 0; border-top: 1px solid var(--line); }
+.rec .recrow { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 2px 12px; align-items: center; padding: 10px 4px; border-radius: 8px; }
+.rec .recrow:hover { background: var(--sunken); } .rec .recrow:focus-visible { outline: 2px solid var(--accent); }
+.rec .chev { color: var(--muted); font-size: 14px; }
+.rec.open { background: var(--sunken); border-radius: var(--r); }
+.recdetail { padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.recdetail .kv { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 10px; }
+.recdetail .kv > span:first-child { color: var(--muted); }
+.recdetail code { font-family: var(--f-code); font-size: 12.5px; }
+.recdesc { font-family: "IBM Plex Sans Arabic", var(--f-body); font-size: 14.5px; line-height: 1.6; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
+.recdetail .toolbar { margin-top: 6px; }
 .rec:first-child { border-top: 0; }
 .rec .what { font-weight: 500; overflow-wrap: anywhere; }
 .rec .what .k { display: inline-block; margin-right: 6px; }
 .rec .when { grid-column: 1; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.rec .btn { grid-row: span 2; }
 .rec.undone { opacity: .55; }
 .empty { padding: 28px 8px; text-align: center; color: var(--muted); }
 .note { background: var(--sunken); border-radius: var(--r); padding: 12px 14px; font-size: 13.5px; }
@@ -305,7 +314,7 @@ body.gated header.bar, body.gated main, body.gated #backbar { display: none !imp
           <button id="rp-all" data-rp="0" aria-pressed="false">All</button>
         </div>
       </div>
-      <p class="sub">Newest first. If something was ticked by mistake or isn't really done, untick it here.</p>
+      <p class="sub">Ticks made in the tracker, newest first. Tap one to read its details before you untick or reopen it.</p>
       <div class="recent" id="recent"><div class="empty">No ticks yet. When someone ticks a task or closes a ticket, it shows here with the date and time.</div></div>
     </div>
   </section>
@@ -462,19 +471,57 @@ function recentItems() {
     const label = pl.status === 'within' ? 'P&L within track' + (pl.amount ? ' · saving ' + money(pl.amount) : '') : 'P&L out of track' + (pl.amount ? ' · over by ' + money(pl.amount) : '');
     items.push({ kind: 'pl', id: slug(s.site), label, site: s.site, owner: s.owner, by: pl.by, at: pl.at });
   }
-  for (const t of S.tickets) if (ownerOk(t.owner) && t.closed && t.closedAt) items.push({ kind: 'ticket', id: tid(t.code), code: t.code, site: t.site, owner: t.owner, by: t.closedVia === 'erp' ? null : t.closedBy, at: t.closedAt });
+  // Only tickets closed by someone in the tracker; tickets closed by an ERP upload are not "ticks".
+  for (const t of S.tickets) if (ownerOk(t.owner) && t.closed && t.closedAt && t.closedVia !== 'erp') items.push({ kind: 'ticket', id: tid(t.code), code: t.code, site: t.site, owner: t.owner, by: t.closedBy, at: t.closedAt });
   return items.sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 let recentDays = 7;
+const RECOPEN = new Set();
+// The full picture behind one Recent line, so it can be checked before undoing.
+function recDetail(x) {
+  const row = (k, v) => v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : '';
+  const site = S.sites.find((s) => slug(s.site) === x.id || s.site === x.site);
+  const st = site ? siteStats(site) : null;
+  const siteLine = st ? `<span class="pill ${st.flag}">${st.flag[0].toUpperCase() + st.flag.slice(1)}</span> ${esc(site.site)} · ${esc(site.owner)} · ${doneCount(site)}/${NT} tasks · ${st.open.length} open ticket${st.open.length === 1 ? '' : 's'}` : esc(x.site);
+  if (x.kind === 'ticket') {
+    const t = S.tickets.find((t) => tid(t.code) === x.id); if (!t) return '<p class="small">This ticket is no longer in the tracker.</p>';
+    return `<div class="recdesc" dir="auto">${esc(t.description || 'No description')}</div>` +
+      row('Ticket', `<code>${esc(t.code)}</code> · ${esc(t.type || 'Not set')}${t.raisedBy === 'Customer' ? ' · <span class="chip cust">Customer</span>' : ' · Internal'}`) +
+      row('Site', siteLine) + row('Project', esc(t.project)) +
+      row('Due date', `${esc(fmtDate(t.target))}${t.target && t.closedAt && t.closedAt.slice(0, 10) > t.target ? ' <span style="color:var(--red)">(closed after due date)</span>' : ''}`) +
+      row('Theme', esc(t.theme !== 'Not set' ? t.theme : '')) + row('Responsible', esc(t.responsible)) + row('Department', esc(t.department)) +
+      row('ERP status', esc(t.erpStatus)) + row('Closed', `${esc(fmtDT(t.closedAt))} by ${whoSpan(t.closedBy)}`);
+  }
+  if (x.kind === 'pl') {
+    const pl = site?.pl || {};
+    return row('P&amp;L', pl.status === 'out' ? '<b style="color:var(--red)">Out of track</b>' : '<b style="color:var(--green)">Within track</b>') +
+      row(pl.status === 'out' ? 'Exceeded by' : 'Saving', pl.amount ? money(pl.amount) : 'No amount entered') +
+      row('Site', siteLine) + (st && st.why.length ? row('Why flagged', esc(st.why.join(' · '))) : '') + row('Set', `${esc(fmtDT(pl.at))} by ${whoSpan(pl.by)}`);
+  }
+  const log = (site?.taskLog || {})[x.key] || {};
+  const left = site ? TASKS.filter(([k]) => (site.tasks || {})[k] !== true).map(([, l]) => l) : [];
+  const openTk = st ? st.open.slice().sort((a, b) => String(a.target).localeCompare(String(b.target))) : [];
+  return row('Task', `<b>${esc(x.label)}</b>`) + row('Site', siteLine) + (st && st.why.length ? row('Why flagged', esc(st.why.join(' · '))) : '') +
+    row('Ticked', `${esc(fmtDT(log.at || x.at))} by ${whoSpan(log.by || x.by)}`) +
+    row('Still to do', left.length ? esc(left.join(', ')) : 'All 7 tasks done') +
+    (x.key === 'ticketClosure' && openTk.length ? row('Open tickets', openTk.map((t) => `<code>${esc(t.code)}</code> due ${esc(fmtDate(t.target))}${isOverdue(t) ? ' <span style="color:var(--red)">overdue</span>' : ''}`).join('<br>')) : '');
+}
 function renderRecent() {
   let items = recentItems();
   if (recentDays) { const cut = Date.now() - recentDays * 86400000; if (recentDays === 1) { const d = new Date(); d.setHours(0,0,0,0); items = items.filter((x) => new Date(x.at) >= d); } else items = items.filter((x) => new Date(x.at).getTime() >= cut); }
   items = items.slice(0, 150);
   if (!items.length) { $('recent').innerHTML = '<div class="empty">No ticks in this period. When someone ticks a task or closes a ticket, it shows here with the date and time.</div>'; return; }
-  $('recent').innerHTML = items.map((x) => `<div class="rec">
-    <div class="what">${x.kind !== 'ticket' ? `<span class="chip k">${x.kind === 'pl' ? 'P&amp;L' : 'Task'}</span>${esc(x.label)} · ${esc(x.site)}` : `<span class="chip k">Ticket</span><code style="font-family:var(--f-code);font-size:12.5px">${esc(x.code)}</code> closed · ${esc(x.site)}`}</div>
-    <button class="btn" data-undo="${x.kind}" data-id="${esc(x.id)}" data-key="${esc(x.key || '')}" ${(S.isOwner || isMgr() || (!!S.myName && x.owner === S.myName)) ? '' : 'disabled'}>${({ task: 'Untick', pl: 'Clear', ticket: 'Reopen' })[x.kind]}</button>
-    <div class="when">${esc(fmtDT(x.at))} · by ${whoSpan(x.by)} · ${esc(x.owner)}</div></div>`).join('');
+  const can = (x) => S.isOwner || isMgr() || (!!S.myName && x.owner === S.myName);
+  $('recent').innerHTML = items.map((x) => { const k = x.kind + ':' + x.id + ':' + (x.key || ''), open = RECOPEN.has(k);
+    return `<div class="rec ${open ? 'open' : ''}">
+    <button class="recrow" data-recopen="${esc(k)}" aria-expanded="${open}">
+      <span class="what">${x.kind !== 'ticket' ? `<span class="chip k">${x.kind === 'pl' ? 'P&amp;L' : 'Task'}</span>${esc(x.label)} · ${esc(x.site)}` : `<span class="chip k">Ticket</span><code style="font-family:var(--f-code);font-size:12.5px">${esc(x.code)}</code> closed · ${esc(x.site)}`}</span>
+      <span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span>
+      <span class="when">${esc(fmtDT(x.at))} · by ${whoSpan(x.by)} · ${esc(x.owner)}</span>
+    </button>
+    ${open ? `<div class="recdetail">${recDetail(x)}
+      <div class="toolbar"><button class="btn ${can(x) ? 'primary' : ''}" data-undo="${x.kind}" data-id="${esc(x.id)}" data-key="${esc(x.key || '')}" ${can(x) ? '' : 'disabled'}>${({ task: 'Untick this task', pl: 'Clear this P&amp;L', ticket: 'Reopen this ticket' })[x.kind]}</button>${can(x) ? '' : '<span class="small">View only — not your site</span>'}</div></div>` : ''}
+  </div>`; }).join('');
   resolveNames([...new Set(items.map((x) => x.by).filter(Boolean))]);
 }
 
@@ -769,6 +816,10 @@ $('sites').addEventListener('click', plAction);
 $('sites').addEventListener('click', (e) => { const b = e.target.closest('[data-gotk]'); if (!b) return; if (!S.back) S.back = null; openTicket(b.dataset.gotk); });
 $('sites').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id?.startsWith('pla-')) { e.preventDefault(); plAction(e); } });
 document.querySelectorAll('[data-rp]').forEach((b) => b.addEventListener('click', () => { recentDays = Number(b.dataset.rp); document.querySelectorAll('[data-rp]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderRecent(); }));
+$('recent').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-recopen]'); if (!r) return;
+  const k = r.dataset.recopen; RECOPEN.has(k) ? RECOPEN.delete(k) : RECOPEN.add(k); renderRecent();
+});
 $('recent').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-undo]'); if (!b || !S.db || b.disabled) return;
   b.disabled = true; b.closest('.rec')?.classList.add('undone');

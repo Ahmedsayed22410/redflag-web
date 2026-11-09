@@ -447,7 +447,7 @@ $('team').addEventListener('click', async (e) => {
 const SITE_URL = location.origin + location.pathname.replace(/index\.html$/, '');
 const APK_URL = SITE_URL + 'RedFlagTracker.apk';
 const inviteMail = (v) => 'mailto:' + v.email + '?subject=' + encodeURIComponent('Red Flag Tracker access') + '&body=' + encodeURIComponent(
-  `Hi ${v.name},\n\nYou now have access to the Red Flag Tracker.\n\nOn a computer: ${SITE_URL}\nAndroid app: ${APK_URL}\n\nSign in with Google using this email (${v.email}). You will see your own sites and can tick them straight away.\n\nIf this email is not a Google account yet, create one for it first at https://accounts.google.com/signup (choose "Use your existing email").`);
+  `Hi ${v.name},\n\nYou now have access to the Red Flag Tracker.\n\nOn a computer: ${SITE_URL}\nAndroid app: ${APK_URL}\n\nOpen the link and sign in with this email (${v.email}): tap "Sign in with Google" if it is a Google account, otherwise type the email under "Sign in with email" and click the link we send you. You will see your own sites and can tick them straight away.`);
 const fmtDT = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const whoSpan = (id) => id ? `<span data-uid="${esc(id)}">${esc(S.names[id] || 'a teammate')}</span>` : 'the ERP file';
 function recentItems() {
@@ -884,7 +884,7 @@ function planImport(rows) {
 // Every screen above talks to `S.db` / `S.user`; this module provides them on top of Firestore,
 // so a tick on the web shows up on phones within a second, and the other way round.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, arrayUnion, arrayRemove,
@@ -1033,6 +1033,19 @@ gate.addEventListener('click', async (e) => {
       const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
       try { await signInWithPopup(auth, p); }
       catch (er) { if (er?.code === 'auth/popup-blocked' || er?.code === 'auth/operation-not-supported-in-this-environment') await signInWithRedirect(auth, p); else throw er; }
+    } else if (b.dataset.g === 'sendlink') {
+      const email = ($('lemail')?.value || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { b.disabled = false; $('lemail')?.focus(); return; }
+      await sendSignInLinkToEmail(auth, email, { url: location.origin + location.pathname, handleCodeInApp: true });
+      try { localStorage.setItem('rf.linkEmail', email); } catch (e) {}
+      showGate(`<p><b>Check your email.</b></p><p>We sent a sign-in link to <b>${esc(email)}</b>. Open it on this computer or phone and you're in.</p><p class="small">It comes from noreply@red-flag-tracker-9ed63.firebaseapp.com. Not there after a minute? Look in Junk / Spam, or in Outlook under "Other".</p><button class="btn" data-g="back">Back</button>`);
+    } else if (b.dataset.g === 'confirmlink') {
+      const email = ($('lemail')?.value || '').trim();
+      if (!email) { b.disabled = false; return; }
+      await signInWithEmailLink(auth, email, location.href);
+      try { localStorage.removeItem('rf.linkEmail'); } catch (e) {}
+      EMAIL_LINK = false; history.replaceState(null, '', location.pathname);
+    } else if (b.dataset.g === 'back') { location.reload(); return;
     } else if (b.dataset.g === 'out') await signOut(auth);
     else if (b.dataset.g === 'own') await setDoc(doc(fs, 'config/app'), { ownerUid: u.uid, ownerName: u.displayName || u.email, names: [] });
     else if (b.dataset.g === 'role') {
@@ -1051,7 +1064,12 @@ gate.addEventListener('click', async (e) => {
   } catch (er) {
     b.disabled = false;
     if (er?.code === 'auth/popup-closed-by-user' || er?.code === 'auth/cancelled-popup-request') return;
-    const msg = er?.code === 'auth/unauthorized-domain'
+    const msg = er?.code === 'auth/operation-not-allowed'
+      ? 'Email sign-in is not turned on yet. The owner needs to enable it in Firebase › Authentication › Sign-in method › Email/Password › Email link.'
+      : (er?.code === 'auth/invalid-action-code' || er?.code === 'auth/expired-action-code')
+      ? 'This sign-in link has expired or was already used. Go back and ask for a new one.'
+      : er?.code === 'auth/invalid-email' ? 'That email does not match the one the link was sent to.'
+      : er?.code === 'auth/unauthorized-domain'
       ? 'This website is not allowed to sign in yet. In Firebase › Authentication › Settings › Authorized domains, add ' + location.hostname + '.'
       : 'Could not finish: ' + (er?.message || 'check your connection and try again.');
     gate.querySelector('.err')?.remove();
@@ -1060,12 +1078,39 @@ gate.addEventListener('click', async (e) => {
 });
 
 $('signout').addEventListener('click', () => signOut(auth));
+gate.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'lemail') { e.preventDefault(); gate.querySelector('[data-g="sendlink"],[data-g="confirmlink"]')?.click(); } });
+
+// Opened from the sign-in email?
+let EMAIL_LINK = isSignInWithEmailLink(auth, location.href);
+async function finishEmailLink() {
+  let email = ''; try { email = localStorage.getItem('rf.linkEmail') || ''; } catch (e) {}
+  if (!email) {
+    // Link opened on a different device or browser: ask which email it was sent to.
+    showGate('<p>Confirm the email address the sign-in link was sent to.</p><input id="lemail" class="search" type="email" placeholder="name@company.com" style="flex:none"><button class="btn primary" data-g="confirmlink">Sign in</button><button class="btn" data-g="back">Cancel</button>');
+    return;
+  }
+  showGate('<p>Signing you in…</p>');
+  try {
+    await signInWithEmailLink(auth, email, location.href);
+    try { localStorage.removeItem('rf.linkEmail'); } catch (e) {}
+  } catch (er) {
+    showGate(`<p class="err">${esc(er?.code === 'auth/invalid-action-code' || er?.code === 'auth/expired-action-code' ? 'This sign-in link has expired or was already used. Ask for a new one.' : 'Could not sign in: ' + (er?.message || ''))}</p><button class="btn" data-g="back">Back</button>`);
+  }
+  EMAIL_LINK = false; history.replaceState(null, '', location.pathname);
+}
 
 onAuthStateChanged(auth, (user) => {
   off(subs); off(roleSubs);
   Object.assign(S, { sites: [], tickets: [], members: {}, requests: {}, isOwner: false, myName: null, myRole: null, me: null, db: null, user: null });
   if (!user) {
-    showGate('<p>Tick monthly tasks, follow tickets and spot red sites, together with your team. Same live data as the Android app.</p><button class="btn primary" data-g="in">Sign in with Google</button><a class="btn" href="RedFlagTracker.apk">Get the Android app</a>');
+    if (EMAIL_LINK) { finishEmailLink(); return; }
+    showGate(`<p>Tick monthly tasks, follow tickets and spot red sites, together with your team. Same live data as the Android app.</p>
+      <button class="btn primary" data-g="in">Sign in with Google</button>
+      <div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px"><span style="flex:1;height:1px;background:var(--line)"></span>or, with any work email<span style="flex:1;height:1px;background:var(--line)"></span></div>
+      <label for="lemail" class="small" style="text-align:left">Sign in with email — we send you a one-time link, no password</label>
+      <input id="lemail" class="search" type="email" autocomplete="email" placeholder="name@company.com" style="flex:none">
+      <button class="btn" data-g="sendlink">Email me a sign-in link</button>
+      <a class="btn" href="RedFlagTracker.apk" style="text-decoration:none">Get the Android app</a>`);
     return;
   }
   ME.uid = user.uid; S.me = user.uid; S.db = dbShim; S.user = userShim; S.canWrite = true;

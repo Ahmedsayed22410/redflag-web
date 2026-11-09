@@ -447,7 +447,7 @@ $('team').addEventListener('click', async (e) => {
 const SITE_URL = location.origin + location.pathname.replace(/index\.html$/, '');
 const APK_URL = SITE_URL + 'RedFlagTracker.apk';
 const inviteMail = (v) => 'mailto:' + v.email + '?subject=' + encodeURIComponent('Red Flag Tracker access') + '&body=' + encodeURIComponent(
-  `Hi ${v.name},\n\nYou now have access to the Red Flag Tracker.\n\nOn a computer: ${SITE_URL}\nAndroid app: ${APK_URL}\n\nOpen the link and sign in with this email (${v.email}): tap "Sign in with Google" if it is a Google account, otherwise type the email under "Sign in with email" and click the link we send you. You will see your own sites and can tick them straight away.`);
+  `Hi ${v.name},\n\nYou now have access to the Red Flag Tracker.\n\nOn a computer: ${SITE_URL}\nAndroid app: ${APK_URL}\n\nOpen the link and sign in with this email (${v.email}): use "Sign in with Microsoft" for an Outlook / Office 365 email, "Sign in with Google" for a Google account, or type the email under "Sign in with email" and click the link we send you. You will see your own sites and can tick them straight away.`);
 const fmtDT = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const whoSpan = (id) => id ? `<span data-uid="${esc(id)}">${esc(S.names[id] || 'a teammate')}</span>` : 'the ERP file';
 function recentItems() {
@@ -884,7 +884,7 @@ function planImport(rows) {
 // Every screen above talks to `S.db` / `S.user`; this module provides them on top of Firestore,
 // so a tick on the web shows up on phones within a second, and the other way round.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, arrayUnion, arrayRemove,
@@ -1033,6 +1033,10 @@ gate.addEventListener('click', async (e) => {
       const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
       try { await signInWithPopup(auth, p); }
       catch (er) { if (er?.code === 'auth/popup-blocked' || er?.code === 'auth/operation-not-supported-in-this-environment') await signInWithRedirect(auth, p); else throw er; }
+    } else if (b.dataset.g === 'ms') {
+      const p = new OAuthProvider('microsoft.com'); p.setCustomParameters({ prompt: 'select_account' });
+      try { await signInWithPopup(auth, p); }
+      catch (er) { if (er?.code === 'auth/popup-blocked' || er?.code === 'auth/operation-not-supported-in-this-environment') await signInWithRedirect(auth, p); else throw er; }
     } else if (b.dataset.g === 'sendlink') {
       const email = ($('lemail')?.value || '').trim();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { b.disabled = false; $('lemail')?.focus(); return; }
@@ -1065,7 +1069,10 @@ gate.addEventListener('click', async (e) => {
     b.disabled = false;
     if (er?.code === 'auth/popup-closed-by-user' || er?.code === 'auth/cancelled-popup-request') return;
     const msg = er?.code === 'auth/operation-not-allowed'
-      ? 'Email sign-in is not turned on yet. The owner needs to enable it in Firebase › Authentication › Sign-in method › Email/Password › Email link.'
+      ? (b.dataset.g === 'ms' ? 'Microsoft sign-in is not turned on yet. The owner needs to enable it in Firebase › Authentication › Sign-in method › Microsoft.'
+        : 'Email sign-in is not turned on yet. The owner needs to enable it in Firebase › Authentication › Sign-in method › Email/Password › Email link.')
+      : er?.code === 'auth/account-exists-with-different-credential'
+      ? 'This email already signed in another way (Google or email link). Use that way to sign in.'
       : (er?.code === 'auth/invalid-action-code' || er?.code === 'auth/expired-action-code')
       ? 'This sign-in link has expired or was already used. Go back and ask for a new one.'
       : er?.code === 'auth/invalid-email' ? 'That email does not match the one the link was sent to.'
@@ -1106,7 +1113,8 @@ onAuthStateChanged(auth, (user) => {
     if (EMAIL_LINK) { finishEmailLink(); return; }
     showGate(`<p>Tick monthly tasks, follow tickets and spot red sites, together with your team. Same live data as the Android app.</p>
       <button class="btn primary" data-g="in">Sign in with Google</button>
-      <div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px"><span style="flex:1;height:1px;background:var(--line)"></span>or, with any work email<span style="flex:1;height:1px;background:var(--line)"></span></div>
+      <button class="btn primary" data-g="ms" style="display:flex;align-items:center;justify-content:center;gap:10px"><svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>Sign in with Microsoft (Outlook / Office 365)</button>
+      <div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px"><span style="flex:1;height:1px;background:var(--line)"></span>or, with any other email<span style="flex:1;height:1px;background:var(--line)"></span></div>
       <label for="lemail" class="small" style="text-align:left">Sign in with email — we send you a one-time link, no password</label>
       <input id="lemail" class="search" type="email" autocomplete="email" placeholder="name@company.com" style="flex:none">
       <button class="btn" data-g="sendlink">Email me a sign-in link</button>

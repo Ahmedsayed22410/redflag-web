@@ -386,9 +386,19 @@ async function renderTeam() {
   if (seq !== teamSeq) return;
   const who = (id) => { const p = ps[id] || {}; return `<b>${esc(p.name || 'Unnamed account')}</b>${p.email ? ` <span class="small">${esc(p.email)}</span>` : ''}`; };
   box.hidden = false;
-  box.innerHTML = `<h2>Team access</h2><p class="sub">Only you see this. Send people this website link or the Android app. They sign in with Google, pick their name and appear here. Check the name and email, then approve. Each person can tick only the sites they own.</p>
+  const keepE = $('invemail')?.value || '', keepN = $('invname')?.value || '', hadFocus = document.activeElement?.id === 'invemail';
+  box.innerHTML = `<h2>Team access</h2><p class="sub">Only you see this. Invite people by email below, or send them this website link or the Android app; they sign in with Google, pick their name and appear here. Check the name and email, then approve. Each person can tick only the sites they own.</p>
     ${req.length ? `<div class="bdgrp"><h3>Waiting for approval</h3>${req.map(([id, r]) => `<div class="bdrow"><span>${who(id)} says they are <b>${esc(r.name)}</b></span><span class="toolbar"><button class="btn primary" data-appr="${esc(id)}">Approve</button><button class="btn" data-rej="${esc(id)}">Reject</button></span></div>`).join('')}</div>` : ''}
+    <div class="bdgrp"><h3>Invite by official email</h3>
+      <p class="small" style="margin:4px 0 8px">Pick the person's name and type their official email. When they sign in with that email they get in straight away, no approval needed.</p>
+      <div class="toolbar"><select class="ownersel" id="invname" aria-label="Name">${[...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort().map((n) => `<option>${esc(n)}</option>`).join('')}</select>
+      <input class="search" id="invemail" type="email" placeholder="name@company.com" aria-label="Official email" style="flex:1 1 220px">
+      <button class="btn primary" data-invadd>Add invite</button></div>
+      ${Object.values(S.invites || {}).sort((a, b) => a.name.localeCompare(b.name)).map((v) => { const joined = mem.find(([, m]) => (m.email || '').toLowerCase() === v.email.toLowerCase());
+        return `<div class="bdrow"><span><b>${esc(v.name)}</b> <span class="small">${esc(v.email)}</span><br><span class="small" style="color:${joined ? 'var(--green)' : 'var(--amber)'}">${joined ? 'Joined' : 'Not signed in yet'}</span></span><span class="toolbar"><a class="btn" href="${esc(inviteMail(v))}">Send email</a><button class="btn" data-invrem="${esc(v.email.toLowerCase())}">Remove</button></span></div>`; }).join('')}
+    </div>
     <div class="bdgrp"><h3>Approved</h3>${mem.length ? mem.map(([id, m]) => `<div class="bdrow"><span>${who(id)} · ticks for <b>${esc(m.name)}</b></span><button class="btn" data-rem="${esc(id)}">Remove</button></div>`).join('') : '<div class="small" style="padding:8px 0">No one approved yet.</div>'}</div>`;
+  if ($('invemail')) { $('invemail').value = keepE; if (keepN) $('invname').value = keepN; if (hadFocus) $('invemail').focus(); }
 }
 $('who').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-claim]'); if (!b || !S.db || !S.me) return;
@@ -398,7 +408,15 @@ $('who').addEventListener('click', async (e) => {
 });
 $('team').addEventListener('click', async (e) => {
   const a = e.target.closest('[data-appr]'), r = e.target.closest('[data-rej]'), m = e.target.closest('[data-rem]');
+  const ia = e.target.closest('[data-invadd]'), ir = e.target.closest('[data-invrem]');
   try {
+    if (ia) { const email = $('invemail').value.trim(), name = $('invname').value;
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Type a full email, for example hala@company.com'); $('invemail').focus(); return; }
+      ia.disabled = true; $('invemail').value = '';
+      try { await S.db.doc('invites/' + email.toLowerCase()).set({ name, email, invitedAt: new Date().toISOString() }); }
+      catch (er) { if ($('invemail')) $('invemail').value = email; ia.disabled = false; throw er; }
+      toast('Invite added for ' + name + '. Tap Send email to let them know.'); return; }
+    if (ir) { ir.disabled = true; await S.db.doc('invites/' + ir.dataset.invrem).delete(); toast('Invite removed'); return; }
     if (a) { const id = a.dataset.appr; const name = S.requests[id]?.name; if (!name) return; a.disabled = true;
       const clash = Object.entries(S.members).find(([i, v]) => v.name === name && i !== id);
       if (clash) await S.db.doc('members/' + clash[0]).delete();
@@ -408,6 +426,10 @@ $('team').addEventListener('click', async (e) => {
   } catch (er) { toast('Could not save. Try again.'); }
 });
 
+const SITE_URL = location.origin + location.pathname.replace(/index\.html$/, '');
+const APK_URL = SITE_URL + 'RedFlagTracker.apk';
+const inviteMail = (v) => 'mailto:' + v.email + '?subject=' + encodeURIComponent('Red Flag Tracker access') + '&body=' + encodeURIComponent(
+  `Hi ${v.name},\n\nYou now have access to the Red Flag Tracker.\n\nOn a computer: ${SITE_URL}\nAndroid app: ${APK_URL}\n\nSign in with Google using this email (${v.email}). You will see your own sites and can tick them straight away.\n\nIf this email is not a Google account yet, create one for it first at https://accounts.google.com/signup (choose "Use your existing email").`);
 const fmtDT = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const whoSpan = (id) => id ? `<span data-uid="${esc(id)}">${esc(S.names[id] || 'a teammate')}</span>` : 'the ERP file';
 function recentItems() {
@@ -847,7 +869,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc,
+  doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const app = initializeApp({
@@ -1014,7 +1036,7 @@ onAuthStateChanged(auth, (user) => {
   off(subs); off(roleSubs);
   Object.assign(S, { sites: [], tickets: [], members: {}, requests: {}, isOwner: false, myName: null, me: null, db: null, user: null });
   if (!user) {
-    showGate('<p>Tick monthly tasks, follow tickets and spot red sites, together with your team. Same live data as the Android app.</p><button class="btn primary" data-g="in">Sign in with Google</button>');
+    showGate('<p>Tick monthly tasks, follow tickets and spot red sites, together with your team. Same live data as the Android app.</p><button class="btn primary" data-g="in">Sign in with Google</button><a class="btn" href="RedFlagTracker.apk">Get the Android app</a>');
     return;
   }
   ME.uid = user.uid; S.me = user.uid; S.db = dbShim; S.user = userShim; S.canWrite = true;
@@ -1042,6 +1064,7 @@ function becomeOwner(user) {
     render();
   }));
   roleSubs.push(onSnapshot(collection(fs, 'requests'), (s) => { S.requests = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }));
+  roleSubs.push(onSnapshot(collection(fs, 'invites'), (s) => { S.invites = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }));
   startData(); showMain(); render();
 }
 
@@ -1053,7 +1076,7 @@ function claimGate() {
 
 function watchMembership(user) {
   $('importbtn').hidden = true; $('newmonth').hidden = true;
-  let reqSub = null;
+  let reqSub = null, triedInvite = false;
   roleSubs.push(onSnapshot(doc(fs, 'members/' + user.uid), (m) => {
     const name = m.exists() ? m.data().name : null;
     if (name) {
@@ -1064,6 +1087,13 @@ function watchMembership(user) {
       startData(); showMain(); render();
     } else {
       S.myName = null; off(subs);
+      if (user.email && !triedInvite) {
+        triedInvite = true;
+        // Invited by email? Join under the name the owner gave this email; the member listener then opens the tracker.
+        getDoc(doc(fs, 'invites/' + user.email.toLowerCase())).then((inv) => {
+          if (inv.exists()) return setDoc(doc(fs, 'members/' + user.uid), { name: inv.data().name, email: user.email, approvedAt: new Date().toISOString(), via: 'invite' });
+        }).catch(() => {});
+      }
       if (!reqSub) {
         reqSub = onSnapshot(doc(fs, 'requests/' + user.uid), (r) => {
           S.requests = r.exists() ? { [user.uid]: r.data() } : {};

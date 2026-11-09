@@ -1230,7 +1230,7 @@ function watchMembership(user) {
       if (reqSub) { reqSub(); reqSub = null; }
       const first = !S.myName;
       S.myName = name; S.myRole = m.data().role || 'team'; ME.name = name; KNOWN[user.uid] = name;
-      if (first) { let saved = ''; try { saved = localStorage.getItem('rf.owner') || ''; } catch (e) {} if (!saved) S.owner = name; }
+      if (first && S.myRole !== 'manager') { let saved = ''; try { saved = localStorage.getItem('rf.owner') || ''; } catch (e) {} if (!saved) S.owner = name; }
       startData(); showMain(); render();
     } else {
       S.myName = null; off(subs);

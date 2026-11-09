@@ -1,0 +1,1080 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Red Flag Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+Arabic:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: sticky bar with view tabs and owner filter; one content column that widens to a two-column grid on desktop. */
+:root {
+  --bg: #F3F5F4; --surface: #FFFFFF; --sunken: #EAEEEC; --line: #D9DFDC;
+  --ink: #16211F; --muted: #5E6C68; --accent: #1D5C55; --on-accent: #FFFFFF;
+  --red: #C23A32; --red-bg: #FBE9E7; --amber: #A86A0B; --amber-bg: #FBF0DA;
+  --green: #22774F; --green-bg: #E2F2E8; --grey: #9AA6A2;
+  --f-body: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --f-num: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --f-code: "IBM Plex Mono", ui-monospace, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F1514; --surface: #172120; --sunken: #1E2A28; --line: #2B3836;
+  --ink: #E5ECEA; --muted: #95A4A0; --accent: #5FB3A8; --on-accent: #08201D;
+  --red: #F07A70; --red-bg: #3A1F1C; --amber: #E2A54A; --amber-bg: #372A15;
+  --green: #5CC38D; --green-bg: #173326; --grey: #66746F; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0F1514; --surface: #172120; --sunken: #1E2A28; --line: #2B3836;
+  --ink: #E5ECEA; --muted: #95A4A0; --accent: #5FB3A8; --on-accent: #08201D;
+  --red: #F07A70; --red-bg: #3A1F1C; --amber: #E2A54A; --amber-bg: #372A15;
+  --green: #5CC38D; --green-bg: #173326; --grey: #66746F; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1180px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-block: 12px; }
+.brand { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+.homebtn { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border: 1px solid var(--line); background: var(--sunken); color: var(--accent); border-radius: var(--r); }
+.homebtn:hover { border-color: var(--accent); }
+.brand h1 { margin: 0; font-family: var(--f-num); font-weight: 600; font-size: 21px; letter-spacing: .01em; }
+.brand small { color: var(--muted); font-size: 12.5px; }
+.tabs { display: flex; gap: 4px; background: var(--sunken); padding: 4px; border-radius: var(--r); }
+.tab { border: 0; background: transparent; padding: 7px 14px; border-radius: 7px; font-weight: 500; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.ownersel { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 7px 10px; }
+
+main { padding-block: 20px 48px; display: flex; flex-direction: column; gap: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; min-width: 0; }
+.card h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.card .sub { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 20px; align-items: start; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.kpi .lbl { color: var(--muted); font-size: 12.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
+.kpi .val { font-family: var(--f-num); font-size: 32px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi .note { color: var(--muted); font-size: 12.5px; }
+.kpi .note { background: none; padding: 0; border-radius: 0; }
+.kpi[data-bd] { cursor: pointer; }
+.kpi[data-bd] .lbl::after { content: "  ›"; }
+.kpi[data-bd]:hover { border-color: var(--accent); }
+.kpi.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.bdhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.bdhead h2 { margin: 0; }
+.bdgrp h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 2px; font-weight: 600; }
+.bdrow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center; }
+.bdgrp h3 + .bdrow { border-top: 0; }
+.bdrow .s { color: var(--muted); font-size: 12.5px; grid-column: 1 / -1; overflow-wrap: anywhere; }
+.bdrow .s.r { color: var(--red); }
+.bdrow .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; font-weight: 600; }
+.bdrow .meter { grid-column: 1 / -1; }
+.bdrow .d { grid-column: 1 / -1; font-family: "IBM Plex Sans Arabic", var(--f-body); font-size: 13.5px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lnk { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; }
+.lnk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lnks { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.lnks .lnk { font-weight: 500; }
+.bdfoot { margin-top: 12px; }
+.bdrow.tk { cursor: pointer; }
+.bdrow.tk:hover { background: var(--sunken); }
+.sitetk { display: flex; flex-direction: column; gap: 6px; }
+.sitetk > b { font-size: 13.5px; }
+.sitetkrow { all: unset; cursor: pointer; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 12.5px; }
+.sitetkrow:hover { border-color: var(--accent); }
+.sitetkrow:focus-visible { outline: 2px solid var(--accent); }
+.sitetkrow .late { color: var(--red); font-weight: 600; }
+.sitetkrow .d { grid-column: 1 / -1; font-family: "IBM Plex Sans Arabic", var(--f-body); font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bdrow.tk:hover .tcode { text-decoration: underline; }
+.tcode { font-family: var(--f-code); font-size: 12.5px; color: var(--accent); font-weight: 500; }
+#backbar { position: fixed; z-index: 15; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+#backbar .btn { box-shadow: 0 4px 14px rgba(0,0,0,.22); padding: 11px 18px; }
+.ticket.focus { background: var(--sunken); border-radius: var(--r); box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; padding-right: 10px; }
+.site.focus > summary { background: var(--sunken); border-radius: var(--r); box-shadow: inset 3px 0 0 var(--accent); }
+.toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important; }
+.kpi.alert { border-color: var(--red); }
+.kpi.alert .val { color: var(--red); }
+
+.meter { height: 6px; background: var(--sunken); border-radius: 3px; overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 3px; background: var(--green); }
+.meter.amber > i { background: var(--amber); } .meter.red > i { background: var(--red); }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.red { color: var(--red); background: var(--red-bg); } .pill.amber { color: var(--amber); background: var(--amber-bg); } .pill.green { color: var(--green); background: var(--green-bg); }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--sunken); color: var(--muted); }
+.chip.cust { background: var(--red-bg); color: var(--red); }
+
+.attn { display: flex; flex-direction: column; }
+.attn button { all: unset; cursor: pointer; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.attn button:first-child { border-top: 0; }
+.attn b { font-weight: 600; } .attn span.r { grid-column: 2; color: var(--red); font-size: 13px; }
+.attn .pill { grid-row: span 2; align-self: start; }
+
+.ownrow { display: grid; grid-template-columns: 90px 1fr 44px; gap: 6px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.ownrow:first-of-type { border-top: 0; }
+.ownrow .nm { font-weight: 600; grid-row: span 2; align-self: start; }
+.ownrow .pc { text-align: right; font-variant-numeric: tabular-nums; }
+.ownrow .lab { grid-column: 2 / 4; color: var(--muted); font-size: 12px; margin-top: -4px; }
+
+.theme { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
+.theme .top { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.theme .top span:last-child { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 7px 12px; color: var(--muted); font-size: 13.5px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.toggle { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13.5px; color: var(--muted); }
+.toggle[aria-pressed="true"] { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+.search { flex: 1 1 200px; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 7px 12px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 8px 14px; font-weight: 500; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.spacer { margin-left: auto; }
+
+.sites { display: flex; flex-direction: column; }
+.site { border-top: 1px solid var(--line); }
+.site:first-child { border-top: 0; }
+.site > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 78px minmax(0,1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 4px; }
+.site > summary::-webkit-details-marker { display: none; }
+.site .nm { font-weight: 600; }
+.site .meta { grid-column: 2; color: var(--muted); font-size: 13px; }
+.site .why { grid-column: 2 / 4; color: var(--red); font-size: 13px; }
+.dots { display: flex; gap: 5px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--red); }
+.dot.on { background: var(--green); } .dot.unset { background: transparent; border: 1.5px dashed var(--grey); }
+.panel { padding: 4px 4px 16px; display: flex; flex-direction: column; gap: 12px; }
+.tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.task { display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 11px 12px; min-height: 48px; }
+.task .box { width: 20px; height: 20px; flex: none; border-radius: 5px; border: 2px solid var(--grey); display: grid; place-items: center; }
+.task[aria-checked="true"] { border-color: var(--green); background: var(--green-bg); }
+.task[aria-checked="true"] .box { background: var(--green); border-color: var(--green); }
+.task[aria-checked="true"] .box::after { content: ""; width: 10px; height: 5px; border: 2px solid var(--on-accent); border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px,-1px); }
+.task:disabled { cursor: default; opacity: .75; }
+.small { color: var(--muted); font-size: 12.5px; }
+
+.tickets { display: flex; flex-direction: column; }
+.ticket { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 12px; padding: 14px 4px; border-top: 1px solid var(--line); }
+.ticket:first-child { border-top: 0; }
+.ticket .close { grid-row: span 3; width: 28px; height: 28px; border-radius: 7px; border: 2px solid var(--grey); background: var(--surface); display: grid; place-items: center; margin-top: 2px; }
+.ticket .close[aria-checked="true"] { background: var(--green); border-color: var(--green); }
+.ticket .close[aria-checked="true"]::after { content: ""; width: 12px; height: 6px; border: 2.5px solid var(--on-accent); border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px,-1px); }
+.ticket .l1 { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.ticket code { font-family: var(--f-code); font-size: 12.5px; }
+.ticket .desc { font-family: "IBM Plex Sans Arabic", var(--f-body); font-size: 14px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.ticket .desc.open { -webkit-line-clamp: unset; display: block; }
+.ticket .l3 { color: var(--muted); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.ticket .due.late { color: var(--red); font-weight: 600; }
+.ticket.done .desc, .ticket.done code { opacity: .6; }
+
+.task { flex-wrap: wrap; }
+.task .when { flex-basis: 100%; padding-left: 30px; color: var(--muted); font-size: 11.5px; margin-top: -4px; }
+.plbox { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.plbox.within { border-color: var(--green); background: var(--green-bg); }
+.plbox.out { border-color: var(--red); background: var(--red-bg); }
+.pltop { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 14px; }
+.pltop .when { color: var(--muted); font-size: 11.5px; }
+.plbox.out .pltop span:not(.when) { color: var(--red); font-weight: 600; }
+.plbox.within .pltop span:not(.when) { color: var(--green); font-weight: 600; }
+.plseg { align-self: flex-start; }
+.plbox.within .plseg [aria-pressed="true"] { background: var(--green); color: var(--on-accent); }
+.plbox.out .plseg [aria-pressed="true"] { background: var(--red); color: var(--on-accent); }
+.plamt { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plamt label { font-size: 13px; font-weight: 500; }
+.plamt input { width: 140px; max-width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 10px; font-variant-numeric: tabular-nums; }
+.recent { display: flex; flex-direction: column; }
+.rec { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 2px 12px; align-items: center; padding: 12px 4px; border-top: 1px solid var(--line); }
+.rec:first-child { border-top: 0; }
+.rec .what { font-weight: 500; overflow-wrap: anywhere; }
+.rec .what .k { display: inline-block; margin-right: 6px; }
+.rec .when { grid-column: 1; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.rec .btn { grid-row: span 2; }
+.rec.undone { opacity: .55; }
+.empty { padding: 28px 8px; text-align: center; color: var(--muted); }
+.note { background: var(--sunken); border-radius: var(--r); padding: 12px 14px; font-size: 13.5px; }
+.note.err { background: var(--red-bg); color: var(--red); }
+.importbox { display: flex; flex-direction: column; gap: 10px; }
+.importbox ul { margin: 0; padding-left: 18px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: var(--r); font-size: 14px; z-index: 20; max-width: calc(100% - 32px); }
+@media (max-width: 520px) { .brand h1 { font-size: 19px; } .tab { padding: 7px 10px; } .site > summary { grid-template-columns: 70px minmax(0,1fr) auto; } }
+@media (prefers-reduced-motion: no-preference) { .meter > i { transition: width .4s ease-out; } }
+
+#syncdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); margin-right: 6px; vertical-align: middle; }
+#syncdot.live { background: var(--green); } #syncdot.off { background: var(--red); }
+#synctxt.live { display: none; } #synctxt.off { color: var(--red); } #synctxt { color: var(--amber); margin-right: 4px; }
+body.gated header.bar, body.gated main, body.gated #backbar { display: none !important; }
+#gate { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; box-sizing: border-box; }
+#gate[hidden] { display: none; }
+.gatecard { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px 24px; display: flex; flex-direction: column; gap: 14px; text-align: center; }
+.gatecard .logo { width: 72px; height: 72px; border-radius: 20px; background: #1D5C55; display: grid; place-items: center; margin: 0 auto; }
+.gatecard h1 { margin: 0; font-family: var(--f-num); font-size: 24px; }
+.gatecard p { margin: 0; color: var(--muted); }
+.gatecard .btn { padding: 12px 16px; }
+.gatecard .names { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.gatecard .err { color: var(--red); }
+</style>
+
+<header class="bar">
+  <div class="wrap">
+    <button class="homebtn" id="homebtn" aria-label="Home: main dashboard" title="Main dashboard"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg></button>
+    <div class="brand"><h1>Red Flag Tracker</h1><small><span id="syncdot" aria-hidden="true"></span><span id="synctxt">Connecting…</span> <span id="asof">Team sites</span></small></div>
+    <div class="tabs" role="tablist" aria-label="Views">
+      <button class="tab" role="tab" id="tab-dashboard" data-view="dashboard" aria-selected="true">Dashboard</button>
+      <button class="tab" role="tab" id="tab-sites" data-view="sites" aria-selected="false">Sites</button>
+      <button class="tab" role="tab" id="tab-tickets" data-view="tickets" aria-selected="false">Tickets</button>
+      <button class="tab" role="tab" id="tab-recent" data-view="recent" aria-selected="false">Recent</button>
+    </div>
+    <select class="ownersel" id="owner" aria-label="Owner"><option value="">All owners</option></select>
+    <button class="btn" id="signout" title="Sign out">Sign out</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="status" class="note" hidden></div>
+  <div id="who" class="note" hidden></div>
+  <div id="backbar" hidden><button class="btn primary" id="backbtn">← Back to dashboard</button></div>
+
+  <section id="view-dashboard">
+    <div class="kpis" id="kpis">
+      <div class="kpi"><span class="lbl">Sites flagged red</span><span class="val">—</span><span class="note">Loading your sites</span></div>
+      <div class="kpi"><span class="lbl">Tasks done</span><span class="val">—</span></div>
+      <div class="kpi"><span class="lbl">Ticket closure</span><span class="val">—</span></div>
+      <div class="kpi"><span class="lbl">Overdue tickets</span><span class="val">—</span></div>
+      <div class="kpi"><span class="lbl">Customer vs internal</span><span class="val">—</span></div>
+    </div>
+    <p class="small" style="margin:8px 0 0">Tap any box to see its breakdown.</p>
+    <div class="card" id="bd" hidden style="margin-top:12px"></div>
+    <div class="grid2" style="margin-top:20px">
+      <div class="card"><h2>Needs attention</h2><p class="sub">Red sites and why. Tap one to open it.</p><div class="attn" id="attn"><div class="empty">Sites appear here once data loads.</div></div></div>
+      <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+        <div class="card"><h2>By owner</h2><p class="sub">Tasks done this month and tickets closed.</p><div id="owners"></div></div>
+        <div class="card"><h2>Repeated issues</h2><p class="sub">Tickets by theme, with how many are still open.</p><div id="themes"></div></div>
+      </div>
+    </div>
+    <div class="card" id="team" hidden style="margin-top:20px"></div>
+  </section>
+
+  <section id="view-sites" hidden>
+    <div class="card">
+      <div class="toolbar" style="margin-bottom:12px">
+        <h2 style="margin:0">Sites</h2>
+        <span class="small" id="monthlbl"></span>
+        <button class="toggle spacer" id="redonly" aria-pressed="false">Red only</button>
+        <button class="btn" id="newmonth" hidden>Start a new month</button>
+      </div>
+      <div id="monthbox" class="note importbox" hidden>
+        <label for="monthname"><b>New month label</b></label>
+        <input id="monthname" class="search" placeholder="Dec 2026">
+        <span>This unticks all 7 tasks and clears the P&amp;L on every site so the team can start the month again. Ticket data is not changed.</span>
+        <div class="toolbar"><button class="btn primary" id="monthgo">Untick all and start</button><button class="btn" id="monthcancel">Cancel</button></div>
+      </div>
+      <p class="small" style="margin:0 0 8px">Tap a site, then tick each task when it is done. Everyone sees the change straight away.</p>
+      <div class="sites" id="sites"><div class="empty">No sites yet. Sites appear here once the tracker is filled.</div></div>
+    </div>
+  </section>
+
+  <section id="view-tickets" hidden>
+    <div class="card">
+      <div class="toolbar" style="margin-bottom:12px">
+        <div class="seg" role="group" aria-label="Show">
+          <button id="st-open" data-st="open" aria-pressed="true">Open</button>
+          <button id="st-closed" data-st="closed" aria-pressed="false">Closed</button>
+          <button id="st-all" data-st="all" aria-pressed="false">All</button>
+        </div>
+        <button class="toggle" id="f-overdue" aria-pressed="false">Overdue</button>
+        <button class="toggle" id="f-cust" aria-pressed="false">Customer</button>
+        <input class="search" id="q" type="search" placeholder="Search code, site, text" aria-label="Search tickets">
+        <button class="btn primary" id="importbtn" hidden>Update from ERP Excel</button>
+        <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+      </div>
+      <div id="importbox" class="note importbox" hidden></div>
+      <p class="small" id="tcount" style="margin:0 0 4px"></p>
+      <div class="tickets" id="tickets"><div class="empty">No tickets yet. Upload the ERP ticket Excel to add them.</div></div>
+    </div>
+  </section>
+
+  <section id="view-recent" hidden>
+    <div class="card">
+      <div class="toolbar" style="margin-bottom:6px">
+        <h2 style="margin:0">Recent ticks</h2>
+        <div class="seg spacer" role="group" aria-label="Period">
+          <button id="rp-1" data-rp="1" aria-pressed="false">Today</button>
+          <button id="rp-7" data-rp="7" aria-pressed="true">7 days</button>
+          <button id="rp-all" data-rp="0" aria-pressed="false">All</button>
+        </div>
+      </div>
+      <p class="sub">Newest first. If something was ticked by mistake or isn't really done, untick it here.</p>
+      <div class="recent" id="recent"><div class="empty">No ticks yet. When someone ticks a task or closes a ticket, it shows here with the date and time.</div></div>
+    </div>
+  </section>
+</main>
+<div id="gate" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const TASKS = [['invoice','Invoice'],['deduction','Deduction'],['report','Monthly report'],['renewal','Contract renewal'],['csat','CSAT survey'],['collection','Collection'],['ticketClosure','Ticket closure']];
+const NT = TASKS.length + 1; // 7 tick tasks + P&L
+const doneCount = (s) => TASKS.filter(([k]) => (s.tasks || {})[k] === true).length + (s.pl && s.pl.status ? 1 : 0);
+const money = (n) => 'EGP ' + Math.round(Number(n) || 0).toLocaleString('en-US');
+const canSite = (s) => S.isOwner || (!!S.myName && s.owner === S.myName);
+const canTk = (t) => S.isOwner || (!!S.myName && t.owner === S.myName);
+const S = { members: {}, requests: {}, myName: null, sites: [], tickets: [], meta: null, owner: '', view: 'dashboard', redOnly: false, st: 'open', overdue: false, cust: false, q: '', db: null, user: null, me: null, isOwner: false, canWrite: true, names: {} };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const fmtDate = (s) => { if (!s) return 'No date'; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
+const ago = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; const h = Math.round(m/60); if (h < 24) return h + ' h ago'; return Math.round(h/24) + ' d ago'; };
+const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'site';
+const tid = (code) => String(code).trim().replace(/[^A-Za-z0-9_\-.~:@+]/g, '_');
+const pct = (a, b) => b ? Math.round(a / b * 100) : null;
+const toast = (msg) => { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600); };
+
+function isOverdue(t) { return !t.closed && t.target && t.target < todayStr(); }
+function siteStats(site) {
+  const tk = S.tickets.filter((t) => t.site === site.site);
+  const open = tk.filter((t) => !t.closed);
+  const tasks = site.tasks || {};
+  const pl = site.pl || null; const plSet = !!(pl && pl.status); const plOut = plSet && pl.status === 'out';
+  const notDone = TASKS.filter(([k]) => tasks[k] !== true).length + (plSet ? 0 : 1);
+  const unset = TASKS.filter(([k]) => tasks[k] === null || tasks[k] === undefined).length;
+  const overdue = open.filter(isOverdue).length;
+  const custOpen = open.filter((t) => t.raisedBy === 'Customer').length;
+  const flag = (notDone >= 3 || overdue > 0 || custOpen > 0 || plOut) ? 'red' : (notDone > 0 || open.length > 0) ? 'amber' : 'green';
+  const why = [];
+  if (unset === TASKS.length && !plSet) why.push('No task status yet');
+  else if (notDone) why.push(notDone + (notDone === 1 ? ' task open' : ' tasks open'));
+  if (plOut) why.push('P&L out of track' + (pl.amount ? ' by ' + money(pl.amount) : ''));
+  if (overdue) why.push(overdue + ' overdue ticket' + (overdue > 1 ? 's' : ''));
+  if (custOpen) why.push(custOpen + ' open customer ticket' + (custOpen > 1 ? 's' : ''));
+  if (tasks.ticketClosure === true && open.length) why.push('ticket closure ticked but ' + open.length + ' still open');
+  if (!why.length && open.length) why.push(open.length + ' open ticket' + (open.length > 1 ? 's' : '') + ', not overdue');
+  return { tk, open, notDone, overdue, custOpen, flag, why };
+}
+const ownerOk = (o) => !S.owner || o === S.owner;
+
+/* ---------- rendering ---------- */
+function render() {
+  const owners = [...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort();
+  const sel = $('owner'); const cur = S.owner;
+  sel.replaceChildren(new Option('All owners', ''), ...owners.map((o) => new Option(o, o)));
+  sel.value = owners.includes(cur) ? cur : '';
+  const m = S.meta || {};
+  $('asof').textContent = (m.month ? m.month + '  ·  ' : '') + (m.ticketsAsOf ? 'Tickets as of ' + fmtDate(m.ticketsAsOf) : 'Team sites');
+  renderDashboard(); renderSites(); renderTickets(); renderRecent(); renderWho(); renderTeam();
+}
+
+function renderWho() {
+  const box = $('who');
+  if (S.isOwner || !S.me || !S.sites.length) { box.hidden = true; return; }
+  box.hidden = false;
+  if (S.myName) { box.innerHTML = `You are signed in as <b>${esc(S.myName)}</b>. You can tick tasks, set P&amp;L and close tickets on your own sites. Other sites are view only.`; return; }
+  const r = S.requests[S.me];
+  if (r) { box.innerHTML = `Waiting for Ahmed to approve you as <b>${esc(r.name)}</b>. You can look around, but ticking is off until he approves.`; return; }
+  const names = [...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort();
+  box.innerHTML = `<b>Who are you?</b> Pick your name. Ahmed approves it, then you can tick on your own sites.<div class="toolbar" style="margin-top:8px">${names.map((n) => `<button class="btn" data-claim="${esc(n)}">${esc(n)}</button>`).join('')}</div>`;
+}
+let teamSeq = 0;
+async function renderTeam() {
+  const box = $('team');
+  if (!S.isOwner) { box.hidden = true; return; }
+  const seq = ++teamSeq;
+  const req = Object.entries(S.requests), mem = Object.entries(S.members);
+  let ps = {};
+  try { if (S.user && (req.length || mem.length)) ps = await S.user.profiles([...req, ...mem].map(([id]) => id)); } catch (e) {}
+  if (seq !== teamSeq) return;
+  const who = (id) => { const p = ps[id] || {}; return `<b>${esc(p.name || 'Unnamed account')}</b>${p.email ? ` <span class="small">${esc(p.email)}</span>` : ''}`; };
+  box.hidden = false;
+  box.innerHTML = `<h2>Team access</h2><p class="sub">Only you see this. Send people this website link or the Android app. They sign in with Google, pick their name and appear here. Check the name and email, then approve. Each person can tick only the sites they own.</p>
+    ${req.length ? `<div class="bdgrp"><h3>Waiting for approval</h3>${req.map(([id, r]) => `<div class="bdrow"><span>${who(id)} says they are <b>${esc(r.name)}</b></span><span class="toolbar"><button class="btn primary" data-appr="${esc(id)}">Approve</button><button class="btn" data-rej="${esc(id)}">Reject</button></span></div>`).join('')}</div>` : ''}
+    <div class="bdgrp"><h3>Approved</h3>${mem.length ? mem.map(([id, m]) => `<div class="bdrow"><span>${who(id)} · ticks for <b>${esc(m.name)}</b></span><button class="btn" data-rem="${esc(id)}">Remove</button></div>`).join('') : '<div class="small" style="padding:8px 0">No one approved yet.</div>'}</div>`;
+}
+$('who').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-claim]'); if (!b || !S.db || !S.me) return;
+  b.disabled = true;
+  try { await S.db.doc('requests/' + S.me).set({ name: b.dataset.claim, at: new Date().toISOString() }); toast('Sent. Ahmed will approve you.'); }
+  catch (er) { b.disabled = false; toast('Could not send. Ask Ahmed to check that you were invited as Editor.'); }
+});
+$('team').addEventListener('click', async (e) => {
+  const a = e.target.closest('[data-appr]'), r = e.target.closest('[data-rej]'), m = e.target.closest('[data-rem]');
+  try {
+    if (a) { const id = a.dataset.appr; const name = S.requests[id]?.name; if (!name) return; a.disabled = true;
+      const clash = Object.entries(S.members).find(([i, v]) => v.name === name && i !== id);
+      if (clash) await S.db.doc('members/' + clash[0]).delete();
+      await S.db.doc('members/' + id).set({ name, approvedAt: new Date().toISOString() }); await S.db.doc('requests/' + id).delete(); toast('Approved as ' + name); }
+    else if (r) { r.disabled = true; await S.db.doc('requests/' + r.dataset.rej).delete(); toast('Request rejected'); }
+    else if (m) { m.disabled = true; await S.db.doc('members/' + m.dataset.rem).delete(); toast('Access removed'); }
+  } catch (er) { toast('Could not save. Try again.'); }
+});
+
+const fmtDT = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
+const whoSpan = (id) => id ? `<span data-uid="${esc(id)}">${esc(S.names[id] || 'a teammate')}</span>` : 'the ERP file';
+function recentItems() {
+  const items = [];
+  for (const s of S.sites) {
+    if (!ownerOk(s.owner)) continue;
+    const log = s.taskLog || {};
+    for (const [k, l] of TASKS) if ((s.tasks || {})[k] === true && log[k] && log[k].at) items.push({ kind: 'task', id: slug(s.site), key: k, label: l, site: s.site, owner: s.owner, by: log[k].by, at: log[k].at });
+  }
+  for (const s of S.sites) {
+    const pl = s.pl; if (!ownerOk(s.owner) || !pl || !pl.status || !pl.at) continue;
+    const label = pl.status === 'within' ? 'P&L within track' + (pl.amount ? ' · saving ' + money(pl.amount) : '') : 'P&L out of track' + (pl.amount ? ' · over by ' + money(pl.amount) : '');
+    items.push({ kind: 'pl', id: slug(s.site), label, site: s.site, owner: s.owner, by: pl.by, at: pl.at });
+  }
+  for (const t of S.tickets) if (ownerOk(t.owner) && t.closed && t.closedAt) items.push({ kind: 'ticket', id: tid(t.code), code: t.code, site: t.site, owner: t.owner, by: t.closedVia === 'erp' ? null : t.closedBy, at: t.closedAt });
+  return items.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+let recentDays = 7;
+function renderRecent() {
+  let items = recentItems();
+  if (recentDays) { const cut = Date.now() - recentDays * 86400000; if (recentDays === 1) { const d = new Date(); d.setHours(0,0,0,0); items = items.filter((x) => new Date(x.at) >= d); } else items = items.filter((x) => new Date(x.at).getTime() >= cut); }
+  items = items.slice(0, 150);
+  if (!items.length) { $('recent').innerHTML = '<div class="empty">No ticks in this period. When someone ticks a task or closes a ticket, it shows here with the date and time.</div>'; return; }
+  $('recent').innerHTML = items.map((x) => `<div class="rec">
+    <div class="what">${x.kind !== 'ticket' ? `<span class="chip k">${x.kind === 'pl' ? 'P&amp;L' : 'Task'}</span>${esc(x.label)} · ${esc(x.site)}` : `<span class="chip k">Ticket</span><code style="font-family:var(--f-code);font-size:12.5px">${esc(x.code)}</code> closed · ${esc(x.site)}`}</div>
+    <button class="btn" data-undo="${x.kind}" data-id="${esc(x.id)}" data-key="${esc(x.key || '')}" ${(S.isOwner || (!!S.myName && x.owner === S.myName)) ? '' : 'disabled'}>${({ task: 'Untick', pl: 'Clear', ticket: 'Reopen' })[x.kind]}</button>
+    <div class="when">${esc(fmtDT(x.at))} · by ${whoSpan(x.by)} · ${esc(x.owner)}</div></div>`).join('');
+  resolveNames([...new Set(items.map((x) => x.by).filter(Boolean))]);
+}
+
+function renderDashboard() {
+  const sites = S.sites.filter((s) => ownerOk(s.owner));
+  if (!sites.length) return;
+  const stats = sites.map((s) => ({ s, ...siteStats(s) }));
+  const red = stats.filter((x) => x.flag === 'red');
+  const cells = sites.length * NT;
+  const done = sites.reduce((n, s) => n + doneCount(s), 0);
+  const plW = sites.filter((s) => s.pl?.status === 'within'), plO = sites.filter((s) => s.pl?.status === 'out');
+  const saved = plW.reduce((n, s) => n + (Number(s.pl.amount) || 0), 0), over = plO.reduce((n, s) => n + (Number(s.pl.amount) || 0), 0);
+  const plNot = sites.length - plW.length - plO.length;
+  const tk = S.tickets.filter((t) => ownerOk(t.owner));
+  const closed = tk.filter((t) => t.closed).length;
+  const overdue = tk.filter(isOverdue).length;
+  const openN = tk.length - closed;
+  const cust = tk.filter((t) => t.raisedBy === 'Customer'); const custOpen = cust.filter((t) => !t.closed).length;
+  const internal = tk.filter((t) => t.raisedBy !== 'Customer' && t.type === 'Complaint').length;
+  const tp = pct(done, cells), cp = pct(closed, tk.length);
+  const meter = (p) => p === null ? '' : `<div class="meter ${p < 60 ? 'red' : p < 80 ? 'amber' : ''}"><i style="width:${p}%"></i></div>`;
+  $('kpis').innerHTML = `
+    <div class="kpi ${red.length ? 'alert' : ''}"><span class="lbl">Sites flagged red</span><span class="val">${red.length} / ${sites.length}</span><span class="note">${stats.filter((x)=>x.flag==='green').length} green · ${stats.filter((x)=>x.flag==='amber').length} amber</span></div>
+    <div class="kpi"><span class="lbl">Tasks done</span><span class="val">${tp ?? '—'}%</span>${meter(tp)}<span class="note">${done} of ${cells} tasks</span></div>
+    <div class="kpi ${plO.length ? 'alert' : ''}"><span class="lbl">P&amp;L out of track</span><span class="val">${plO.length}</span><span class="note">${over ? money(over) + ' over · ' : ''}${plW.length} within track${saved ? ' · ' + money(saved) + ' saved' : ''}${plNot ? ' · ' + plNot + ' not set' : ''}</span></div>
+    <div class="kpi"><span class="lbl">Ticket closure</span><span class="val">${cp ?? '—'}${cp === null ? '' : '%'}</span>${meter(cp)}<span class="note">${closed} of ${tk.length} closed</span></div>
+    <div class="kpi ${overdue ? 'alert' : ''}"><span class="lbl">Overdue tickets</span><span class="val">${overdue}</span><span class="note">of ${openN} open</span></div>
+    <div class="kpi"><span class="lbl">Customer vs internal</span><span class="val">${cust.length} vs ${internal}</span><span class="note">${custOpen} customer ticket${custOpen === 1 ? '' : 's'} still open</span></div>`;
+  const keys = ['red', 'tasks', 'pl', 'closure', 'overdue', 'cust'];
+  [...$('kpis').children].forEach((el, i) => { el.dataset.bd = keys[i]; el.setAttribute('role', 'button'); el.tabIndex = 0; });
+  renderBreakdown();
+
+  $('attn').innerHTML = red.length ? red.map((x) => `<button data-open="${esc(slug(x.s.site))}"><span class="pill red">Red</span><b>${esc(x.s.site)} <span class="small">· ${esc(x.s.owner)}</span></b><span class="r">${esc(x.why.join(' · '))}</span></button>`).join('') : '<div class="empty">No red sites. Everything is on track.</div>';
+
+  const owners = [...new Set(sites.map((s) => s.owner))].sort();
+  $('owners').innerHTML = owners.map((o) => {
+    const os = sites.filter((s) => s.owner === o); const ot = S.tickets.filter((t) => t.owner === o);
+    const d = os.reduce((n, s) => n + doneCount(s), 0);
+    const a = pct(d, os.length * NT), b = pct(ot.filter((t) => t.closed).length, ot.length);
+    const od = ot.filter(isOverdue).length;
+    return `<div class="ownrow"><span class="nm">${esc(o)}<br><span class="small">${os.length} sites${od ? ` · <span style="color:var(--red)">${od} overdue</span>` : ''}</span></span>
+      ${meter(a) || '<span></span>'}<span class="pc">${a ?? '—'}%</span><span class="lab">Tasks done</span>
+      <span></span>${meter(b) || '<div class="small">No tickets</div>'}<span class="pc">${b === null ? '—' : b + '%'}</span><span class="lab">Tickets closed</span></div>`;
+  }).join('');
+
+  const themes = {};
+  for (const t of tk) { const k = t.theme || 'Not set'; themes[k] = themes[k] || { n: 0, open: 0 }; themes[k].n++; if (!t.closed) themes[k].open++; }
+  const list = Object.entries(themes).sort((a, b) => b[1].n - a[1].n);
+  const max = list.length ? list[0][1].n : 1;
+  $('themes').innerHTML = list.length ? list.map(([k, v]) => `<div class="theme"><div class="top"><span>${esc(k)}</span><span>${v.n} tickets · <span style="color:${v.open ? 'var(--red)' : 'var(--muted)'}">${v.open} open</span></span></div><div class="meter ${v.open ? 'red' : ''}"><i style="width:${Math.round(v.n / max * 100)}%; ${v.open ? '' : 'background:var(--grey)'}"></i></div></div>`).join('') : '<div class="empty">No tickets yet.</div>';
+}
+
+let BD = null;
+function renderBreakdown() {
+  const box = $('bd');
+  document.querySelectorAll('.kpi[data-bd]').forEach((k) => { k.classList.toggle('active', k.dataset.bd === BD); k.setAttribute('aria-expanded', String(k.dataset.bd === BD)); });
+  if (!BD || !S.sites.length) { box.hidden = true; return; }
+  const sites = S.sites.filter((s) => ownerOk(s.owner));
+  const stats = sites.map((s) => ({ s, ...siteStats(s) }));
+  const tk = S.tickets.filter((t) => ownerOk(t.owner));
+  const link = (s) => `<button class="lnk" data-open="${esc(slug(s.site))}">${esc(s.site)} ›</button>`;
+  const rowOpen = (site) => `class="bdrow tk" data-open="${esc(slug(site))}" role="button" tabindex="0" aria-label="Open ${esc(site)}"`;
+  const group = (h, rows) => rows.length ? `<div class="bdgrp"><h3>${h}</h3>${rows.join('')}</div>` : '';
+  const meter = (p) => `<div class="meter ${p < 60 ? 'red' : p < 80 ? 'amber' : ''}"><i style="width:${p}%"></i></div>`;
+  const tRow = (t) => { const late = isOverdue(t) ? Math.round((new Date(todayStr()) - new Date(t.target)) / 86400000) : 0;
+    return `<div class="bdrow tk" data-ticket="${esc(tid(t.code))}" role="button" tabindex="0" aria-label="Open ticket ${esc(t.code)}"><span><code class="tcode">${esc(t.code)} ›</code> · ${link(t)}</span><span class="num" style="color:${t.closed ? 'var(--green)' : 'var(--red)'}">${t.closed ? 'Closed' : late ? late + ' days late' : 'Open'}</span>
+      <span class="d" dir="auto">${esc(t.description || 'No description')}</span><span class="s">${esc(t.owner)} · Due ${esc(fmtDate(t.target))}${t.responsible ? ' · ' + esc(t.responsible) : ''}</span></div>`; };
+  let title = '', body = '';
+  if (BD === 'red') {
+    title = 'Sites by flag';
+    const rows = (f) => stats.filter((x) => x.flag === f).sort((a, b) => a.s.site.localeCompare(b.s.site)).map((x) => `<div ${rowOpen(x.s.site)}><span>${link(x.s)} <span class="small">· ${esc(x.s.owner)}</span></span><span class="pill ${f}">${f[0].toUpperCase() + f.slice(1)}</span>${x.why.length ? `<span class="s ${f === 'red' ? 'r' : ''}">${esc(x.why.join(' · '))}</span>` : ''}</div>`);
+    body = group('Red', rows('red')) + group('Amber', rows('amber')) + group('Green', rows('green')) + `<div class="bdfoot"><button class="btn" data-goto="red">Open red sites in Sites</button></div>`;
+  } else if (BD === 'tasks') {
+    title = 'Tasks done, task by task';
+    const list = [TASKS[0], ['pl', 'P&L'], ...TASKS.slice(1)];
+    body = list.map(([k, l]) => {
+      const isDone = (s) => k === 'pl' ? !!(s.pl && s.pl.status) : (s.tasks || {})[k] === true;
+      const miss = sites.filter((s) => !isDone(s)); const d = sites.length - miss.length; const p = pct(d, sites.length) ?? 0;
+      return `<div class="bdrow"><b>${esc(l)}</b><span class="num">${d} of ${sites.length} sites</span>${meter(p)}${miss.length ? `<span class="lnks"><span class="small">Not done:</span>${miss.map(link).join('')}</span>` : '<span class="s">Done at every site</span>'}</div>`;
+    }).join('');
+  } else if (BD === 'pl') {
+    title = 'P&L by site';
+    const out = sites.filter((s) => s.pl?.status === 'out').sort((a, b) => (b.pl.amount || 0) - (a.pl.amount || 0));
+    const win = sites.filter((s) => s.pl?.status === 'within').sort((a, b) => (b.pl.amount || 0) - (a.pl.amount || 0));
+    const not = sites.filter((s) => !s.pl?.status);
+    const r = (s, c) => `<div ${rowOpen(s.site)}><span>${link(s)} <span class="small">· ${esc(s.owner)}</span></span><span class="num" style="color:${c}">${s.pl.amount ? money(s.pl.amount) : 'No amount yet'}</span><span class="s">Set ${esc(fmtDT(s.pl.at))} by ${whoSpan(s.pl.by)}</span></div>`;
+    body = group('Out of track · exceeded', out.map((s) => r(s, 'var(--red)'))) + group('Within track · saving', win.map((s) => r(s, 'var(--green)'))) +
+      (not.length ? `<div class="bdgrp"><h3>Not set yet (${not.length})</h3><div class="bdrow"><span class="lnks">${not.map(link).join('')}</span></div></div>` : '');
+    resolveNames([...new Set([...out, ...win].map((s) => s.pl.by).filter(Boolean))]);
+  } else if (BD === 'closure') {
+    title = 'Ticket closure by site';
+    const rows = sites.map((s) => { const t = tk.filter((x) => x.site === s.site); return { s, n: t.length, c: t.filter((x) => x.closed).length }; }).filter((x) => x.n).sort((a, b) => a.c / a.n - b.c / b.n);
+    body = rows.map(({ s, n, c }) => { const p = pct(c, n); return `<div ${rowOpen(s.site)}><span>${link(s)} <span class="small">· ${esc(s.owner)}</span></span><span class="num">${p}% · ${c} of ${n}</span>${meter(p)}${n - c ? `<span class="s r">${n - c} still open</span>` : ''}</div>`; }).join('') || '<div class="empty">No tickets yet.</div>';
+    const none = sites.filter((s) => !tk.some((x) => x.site === s.site));
+    if (none.length) body += `<div class="bdgrp"><h3>No tickets</h3><div class="bdrow"><span class="lnks">${none.map(link).join('')}</span></div></div>`;
+  } else if (BD === 'overdue') {
+    title = 'Overdue tickets, most late first';
+    const list = tk.filter(isOverdue).sort((a, b) => String(a.target).localeCompare(String(b.target)));
+    body = (list.map(tRow).join('') || '<div class="empty">No overdue tickets.</div>') + `<div class="bdfoot"><button class="btn" data-goto="overdue">Open these in Tickets</button></div>`;
+  } else if (BD === 'cust') {
+    title = 'Customer-raised vs internal complaints';
+    const cust = tk.filter((t) => t.raisedBy === 'Customer').sort((a, b) => (a.closed - b.closed) || String(b.target).localeCompare(String(a.target)));
+    const bySite = {}; for (const t of tk) if (t.raisedBy !== 'Customer' && t.type === 'Complaint') { const k = t.site; bySite[k] = bySite[k] || { n: 0, open: 0 }; bySite[k].n++; if (!t.closed) bySite[k].open++; }
+    const ints = Object.entries(bySite).sort((a, b) => b[1].n - a[1].n).map(([site, v]) => `<div ${rowOpen(site)}><span>${link({ site })} <span class="small">· ${esc(sites.find((s) => s.site === site)?.owner || '')}</span></span><span class="num">${v.n} complaint${v.n === 1 ? '' : 's'}</span>${v.open ? `<span class="s r">${v.open} still open</span>` : ''}</div>`);
+    body = group(`Raised by customers (${cust.length})`, cust.map(tRow)) + group('Internal complaints by site', ints) + `<div class="bdfoot"><button class="btn" data-goto="cust">Open customer tickets in Tickets</button></div>`;
+  }
+  box.innerHTML = `<div class="bdhead"><h2>${esc(title)}</h2><button class="btn" data-bdclose>Close</button></div>${body}`;
+  box.hidden = false;
+}
+function rememberBack() { S.back = { bd: BD, y: window.scrollY }; }
+function openSite(id) {
+  S.focusSite = id; S.focusTid = null;
+  if (S.redOnly) { const s = S.sites.find((x) => slug(x.site) === id); if (s && siteStats(s).flag !== 'red') { S.redOnly = false; $('redonly').setAttribute('aria-pressed', 'false'); } }
+  show('sites'); renderSites();
+  const d = document.querySelector(`.site[data-id="${CSS.escape(id)}"]`); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); }
+}
+function openTicket(id) {
+  S.focusTid = id; S.focusSite = null;
+  S.st = 'all'; S.overdue = false; S.cust = false; S.q = ''; $('q').value = '';
+  document.querySelectorAll('[data-st]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.st === 'all')));
+  $('f-overdue').setAttribute('aria-pressed', 'false'); $('f-cust').setAttribute('aria-pressed', 'false');
+  show('tickets'); renderTickets();
+  const el = document.querySelector(`.ticket[data-tid="${CSS.escape(id)}"]`);
+  if (el) { el.querySelector('.desc')?.classList.add('open'); el.scrollIntoView({ block: 'center' }); }
+}
+function renderSites() {
+  const fa = document.activeElement; const keep = fa && fa.id && fa.id.startsWith('pla-') ? [fa.id, fa.value] : null;
+  const openIds = new Set([...document.querySelectorAll('.site[open]')].map((d) => d.dataset.id));
+  const rank = { red: 0, amber: 1, green: 2 };
+  let list = S.sites.filter((s) => ownerOk(s.owner)).map((s) => ({ s, ...siteStats(s) }));
+  if (S.redOnly) list = list.filter((x) => x.flag === 'red');
+  list.sort((a, b) => rank[a.flag] - rank[b.flag] || a.s.site.localeCompare(b.s.site));
+  $('monthlbl').textContent = S.meta?.month ? 'Month: ' + S.meta.month : '';
+  if (!S.sites.length) return;
+  const ids = [...new Set(list.map((x) => x.s.updatedBy).filter(Boolean))];
+  $('sites').innerHTML = list.length ? list.map(({ s, flag, why, open }) => {
+    const id = slug(s.site); const tasks = s.tasks || {};
+    const dotArr = TASKS.map(([k, l]) => `<i class="dot ${tasks[k] === true ? 'on' : (tasks[k] === null || tasks[k] === undefined) ? 'unset' : ''}" title="${esc(l)}"></i>`);
+    const plv = s.pl || {};
+    dotArr.splice(1, 0, `<i class="dot ${plv.status === 'within' ? 'on' : plv.status === 'out' ? '' : 'unset'}" title="P&amp;L"></i>`);
+    const dots = dotArr.join('');
+    const doneN = doneCount(s);
+    if (plv.by) ids.push(plv.by);
+    const log = s.taskLog || {};
+    const btnArr = TASKS.map(([k, l]) => `<button class="task" role="checkbox" aria-checked="${tasks[k] === true}" data-site="${esc(id)}" data-task="${k}" ${canSite(s) ? '' : 'disabled'}><span class="box"></span>${esc(l)}${tasks[k] === true && log[k]?.at ? `<span class="when">${esc(fmtDT(log[k].at))} · ${whoSpan(log[k].by)}</span>` : ''}</button>`);
+    btnArr.splice(1, 0, plBlock(s, id)); const btns = btnArr.join('');
+    for (const k in log) if (log[k]?.by) ids.push(log[k].by);
+    const who = s.updatedBy ? `Last change by <span data-uid="${esc(s.updatedBy)}">${esc(S.names[s.updatedBy] || 'a teammate')}</span>, ${ago(s.updatedAt)}` : 'No changes yet this month';
+    return `<details class="site ${S.focusSite === id ? 'focus' : ''}" data-id="${esc(id)}" ${openIds.has(id) || S.focusSite === id ? 'open' : ''}>
+      <summary><span class="pill ${flag}">${flag[0].toUpperCase() + flag.slice(1)}</span><span class="nm">${esc(s.site)}</span><span class="dots" aria-label="${doneN} of ${NT} tasks done">${dots}</span>
+        <span class="meta">${esc(s.owner)} · ${doneN}/${NT} tasks · ${open.length} open ticket${open.length === 1 ? '' : 's'}</span>
+        ${flag !== 'green' ? `<span class="why" style="${flag === 'amber' ? 'color:var(--amber)' : ''}">${esc(why.join(' · '))}</span>` : ''}</summary>
+      <div class="panel"><div class="tasks">${btns}</div>
+        ${open.length ? `<div class="sitetk"><b>Open tickets (${open.length})</b>${open.slice().sort((a, b) => String(a.target).localeCompare(String(b.target))).map((t) => `<button class="sitetkrow" data-gotk="${esc(tid(t.code))}"><span class="tcode">${esc(t.code)} ›</span><span class="${isOverdue(t) ? 'late' : ''}">${isOverdue(t) ? 'Overdue · ' : ''}Due ${esc(fmtDate(t.target))}</span><span class="d" dir="auto">${esc(t.description || 'No description')}</span></button>`).join('')}</div>` : '<div class="small">No open tickets at this site.</div>'}
+        ${s.notes ? `<div class="small">Note: ${esc(s.notes)}</div>` : ''}
+        <div class="small">${who}</div></div></details>`;
+  }).join('') : '<div class="empty">No red sites for this owner.</div>';
+  if (keep) { const el = $(keep[0]); if (el) { el.value = keep[1]; el.focus(); } }
+  resolveNames(ids);
+}
+function plBlock(s, id) {
+  const pl = s.pl || {}; const dis = canSite(s) ? '' : 'disabled';
+  const lbl = pl.status === 'out' ? 'Exceeded by (EGP)' : 'Saving (EGP)';
+  const amt = pl.amount ? (pl.status === 'out' ? 'Over by ' : 'Saving ') + money(pl.amount) : '';
+  return `<div class="plbox ${esc(pl.status || '')}" data-pl="${esc(id)}">
+    <div class="pltop"><b>P&amp;L</b>${amt ? `<span>${esc(amt)}</span>` : ''}<span class="when">${pl.at ? esc(fmtDT(pl.at)) + ' · ' + whoSpan(pl.by) : 'Not set yet'}</span></div>
+    <div class="seg plseg" role="group" aria-label="P&amp;L status"><button data-plset="within" aria-pressed="${pl.status === 'within'}" ${dis}>Within track</button><button data-plset="out" aria-pressed="${pl.status === 'out'}" ${dis}>Out of track</button></div>
+    ${pl.status ? `<div class="plamt"><label for="pla-${esc(id)}">${lbl}</label><input id="pla-${esc(id)}" type="number" min="0" step="1" inputmode="numeric" value="${pl.amount ?? ''}" placeholder="0" ${dis}><button class="btn" data-plsave ${dis}>Save amount</button><button class="btn" data-plclear ${dis}>Clear</button></div>` : ''}
+  </div>`;
+}
+
+function renderTickets() {
+  if (!S.tickets.length) { $('tcount').textContent = ''; return; }
+  const q = S.q.trim().toLowerCase();
+  let list = S.tickets.filter((t) => ownerOk(t.owner));
+  if (S.st === 'open') list = list.filter((t) => !t.closed); else if (S.st === 'closed') list = list.filter((t) => t.closed);
+  if (S.overdue) list = list.filter(isOverdue);
+  if (S.cust) list = list.filter((t) => t.raisedBy === 'Customer');
+  if (q) list = list.filter((t) => [t.code, t.site, t.owner, t.description, t.theme, t.responsible].join(' ').toLowerCase().includes(q));
+  list.sort((a, b) => (a.closed - b.closed) || String(a.target || '9').localeCompare(String(b.target || '9')));
+  $('tcount').textContent = list.length + ' ticket' + (list.length === 1 ? '' : 's') + (S.st === 'open' ? ' open' : '') + ', oldest due date first';
+  const siteOpts = [...new Set(S.sites.map((s) => s.site))].sort();
+  $('tickets').innerHTML = list.length ? list.map((t) => {
+    const late = isOverdue(t);
+    const siteCell = (t.site === 'Unmapped' && S.isOwner)
+      ? `<select class="ownersel" data-assign="${esc(tid(t.code))}" aria-label="Assign site"><option value="">Assign a site</option>${siteOpts.map((s) => `<option>${esc(s)}</option>`).join('')}</select>`
+      : `<span>${esc(t.site)} · ${esc(t.owner)}</span>`;
+    return `<div class="ticket ${t.closed ? 'done' : ''} ${S.focusTid === tid(t.code) ? 'focus' : ''}" data-tid="${esc(tid(t.code))}">
+      <button class="close" role="checkbox" aria-checked="${!!t.closed}" aria-label="Closed" data-close="${esc(tid(t.code))}" ${canTk(t) ? '' : 'disabled'}></button>
+      <div class="l1"><code>${esc(t.code)}</code>${t.raisedBy === 'Customer' ? '<span class="chip cust">Customer</span>' : ''}<span class="chip">${esc(t.type || 'Not set')}</span>${siteCell}</div>
+      <div class="desc" dir="auto">${esc(t.description || 'No description')}</div>
+      <div class="l3"><span class="due ${late ? 'late' : ''}">${late ? 'Overdue · ' : ''}Due ${esc(fmtDate(t.target))}</span>${t.theme ? `<span>${esc(t.theme)}</span>` : ''}${t.responsible ? `<span>${esc(t.responsible)}</span>` : ''}${t.closed && t.closedAt ? `<span>Closed ${esc(fmtDT(t.closedAt))} by ${whoSpan(t.closedVia === 'erp' ? null : t.closedBy)}</span>` : (t.closed ? '<span>Closed in the ERP</span>' : '')}</div></div>`;
+  }).join('') : '<div class="empty">No tickets match these filters.</div>';
+  resolveNames([...new Set(list.map((t) => t.closedBy).filter(Boolean))]);
+}
+
+async function resolveNames(ids) {
+  if (!S.user || !ids.length) return;
+  try { const ps = await S.user.profiles(ids); for (const id of ids) S.names[id] = ps[id]?.name || 'a teammate'; }
+  catch (e) { return; }
+  document.querySelectorAll('[data-uid]').forEach((el) => { el.textContent = S.names[el.dataset.uid] || 'a teammate'; });
+}
+
+/* ---------- views ---------- */
+function show(view) {
+  S.view = view;
+  for (const v of ['dashboard', 'sites', 'tickets', 'recent']) { $('view-' + v).hidden = v !== view; $('tab-' + v).setAttribute('aria-selected', String(v === view)); }
+  $('backbar').hidden = !(S.back && view !== 'dashboard');
+  try { localStorage.setItem('rf.view', view); } catch (e) {}
+}
+document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => { S.back = null; S.focusTid = null; S.focusSite = null; show(b.dataset.view); renderSites(); renderTickets(); }));
+$('homebtn').addEventListener('click', () => {
+  S.back = null; S.focusTid = null; S.focusSite = null; BD = null;
+  show('dashboard'); renderDashboard(); renderSites(); renderTickets();
+  window.scrollTo(0, 0);
+});
+$('backbtn').addEventListener('click', () => {
+  const b = S.back; S.back = null; S.focusTid = null; S.focusSite = null;
+  if (b) BD = b.bd;
+  show('dashboard'); renderDashboard(); renderSites(); renderTickets();
+  requestAnimationFrame(() => window.scrollTo(0, b ? b.y : 0));
+});
+$('owner').addEventListener('change', (e) => { S.owner = e.target.value; try { localStorage.setItem('rf.owner', S.owner); } catch (er) {} render(); });
+$('redonly').addEventListener('click', (e) => { S.redOnly = !S.redOnly; e.currentTarget.setAttribute('aria-pressed', String(S.redOnly)); renderSites(); });
+document.querySelectorAll('[data-st]').forEach((b) => b.addEventListener('click', () => { S.st = b.dataset.st; document.querySelectorAll('[data-st]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderTickets(); }));
+$('f-overdue').addEventListener('click', (e) => { S.overdue = !S.overdue; e.currentTarget.setAttribute('aria-pressed', String(S.overdue)); renderTickets(); });
+$('f-cust').addEventListener('click', (e) => { S.cust = !S.cust; e.currentTarget.setAttribute('aria-pressed', String(S.cust)); renderTickets(); });
+$('q').addEventListener('input', (e) => { S.q = e.target.value; renderTickets(); });
+$('attn').addEventListener('click', (e) => { const b = e.target.closest('[data-open]'); if (!b) return; rememberBack(); openSite(b.dataset.open); });
+$('tickets').addEventListener('click', (e) => { const d = e.target.closest('.desc'); if (d) d.classList.toggle('open'); });
+const pickBd = (el) => { if (!el) return; BD = BD === el.dataset.bd ? null : el.dataset.bd; renderBreakdown(); if (BD) $('bd').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
+$('kpis').addEventListener('click', (e) => pickBd(e.target.closest('.kpi[data-bd]')));
+$('kpis').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const k = e.target.closest('.kpi[data-bd]'); if (k) { e.preventDefault(); pickBd(k); } } });
+const press = (id, v) => $(id).setAttribute('aria-pressed', String(v));
+$('bd').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if (e.target.matches('[data-ticket]')) { e.preventDefault(); rememberBack(); openTicket(e.target.dataset.ticket); }
+  else if (e.target.matches('.bdrow[data-open]')) { e.preventDefault(); rememberBack(); openSite(e.target.dataset.open); }
+});
+$('bd').addEventListener('click', (e) => {
+  if (e.target.closest('[data-bdclose]')) { BD = null; renderBreakdown(); return; }
+  const o = e.target.closest('[data-open]'); if (o) { rememberBack(); openSite(o.dataset.open); return; }
+  const tr = e.target.closest('[data-ticket]'); if (tr) { rememberBack(); openTicket(tr.dataset.ticket); return; }
+  const g = e.target.closest('[data-goto]'); if (!g) return;
+  rememberBack(); S.focusTid = null; S.focusSite = null;
+  if (g.dataset.goto === 'red') { S.redOnly = true; press('redonly', true); show('sites'); renderSites(); return; }
+  S.q = ''; $('q').value = '';
+  if (g.dataset.goto === 'overdue') { S.st = 'open'; S.overdue = true; S.cust = false; }
+  else { S.st = 'all'; S.overdue = false; S.cust = true; }
+  document.querySelectorAll('[data-st]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.st === S.st)));
+  press('f-overdue', S.overdue); press('f-cust', S.cust); show('tickets'); renderTickets();
+});
+try { const v = localStorage.getItem('rf.view'); if (v) show(v); S.owner = localStorage.getItem('rf.owner') || ''; } catch (e) {}
+
+/* ---------- writes ---------- */
+const chains = {};
+function write(path, data) {
+  const run = () => S.db.doc(path).update(data);
+  chains[path] = (chains[path] || Promise.resolve()).then(run, run);
+  return chains[path].catch((e) => { if (e?.code === 'invalid_argument') { S.canWrite = false; render(); toast('You can view this tracker but not change it. Ask Ahmed for edit access.'); } else toast('Could not save. Check your connection and try again.'); throw e; });
+}
+$('sites').addEventListener('click', async (e) => {
+  const b = e.target.closest('.task'); if (!b || !S.db || b.disabled) return;
+  const site = S.sites.find((s) => slug(s.site) === b.dataset.site); if (!site) return;
+  const val = !(site.tasks || {})[b.dataset.task];
+  b.setAttribute('aria-checked', String(val));
+  const now = new Date().toISOString();
+  try { await write('sites/' + b.dataset.site, { tasks: { [b.dataset.task]: val }, taskLog: { [b.dataset.task]: val ? { by: S.me, at: now } : null }, updatedBy: S.me, updatedAt: now }); } catch (er) {}
+});
+async function plAction(e) {
+  const box = e.target.closest('[data-pl]'); if (!box || !S.db) return;
+  const id = box.dataset.pl; const s = S.sites.find((x) => slug(x.site) === id); if (!s) return;
+  const now = new Date().toISOString();
+  const setB = e.target.closest('[data-plset]');
+  try {
+    if (setB && !setB.disabled) {
+      const st = setB.dataset.plset; if (s.pl?.status === st) return;
+      await write('sites/' + id, { pl: { status: st, amount: null, by: S.me, at: now }, updatedBy: S.me, updatedAt: now });
+      toast('P&L ' + (st === 'within' ? 'within track' : 'out of track') + ' for ' + s.site + '. Add the amount below.');
+    } else if (e.target.closest('[data-plsave]') || e.type === 'keydown') {
+      const v = box.querySelector('input').value.trim(); const n = v === '' ? null : Number(v);
+      if (n !== null && (!isFinite(n) || n < 0)) { toast('Enter the amount as a positive number, for example 12500'); return; }
+      await write('sites/' + id, { pl: { amount: n, by: S.me, at: now }, updatedBy: S.me, updatedAt: now });
+      toast(n === null ? 'Amount removed' : 'Saved ' + money(n) + ' for ' + s.site);
+    } else if (e.target.closest('[data-plclear]')) {
+      await write('sites/' + id, { pl: null, updatedBy: S.me, updatedAt: now });
+      toast('P&L cleared for ' + s.site);
+    }
+  } catch (er) {}
+}
+$('sites').addEventListener('click', plAction);
+$('sites').addEventListener('click', (e) => { const b = e.target.closest('[data-gotk]'); if (!b) return; if (!S.back) S.back = null; openTicket(b.dataset.gotk); });
+$('sites').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id?.startsWith('pla-')) { e.preventDefault(); plAction(e); } });
+document.querySelectorAll('[data-rp]').forEach((b) => b.addEventListener('click', () => { recentDays = Number(b.dataset.rp); document.querySelectorAll('[data-rp]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderRecent(); }));
+$('recent').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-undo]'); if (!b || !S.db || b.disabled) return;
+  b.disabled = true; b.closest('.rec')?.classList.add('undone');
+  const now = new Date().toISOString();
+  try {
+    if (b.dataset.undo === 'task') {
+      const s = S.sites.find((x) => slug(x.site) === b.dataset.id);
+      await write('sites/' + b.dataset.id, { tasks: { [b.dataset.key]: false }, taskLog: { [b.dataset.key]: null }, updatedBy: S.me, updatedAt: now });
+      toast((TASKS.find(([k]) => k === b.dataset.key) || [, 'Task'])[1] + ' unticked for ' + (s?.site || 'site'));
+    } else if (b.dataset.undo === 'pl') {
+      await write('sites/' + b.dataset.id, { pl: null, updatedBy: S.me, updatedAt: now });
+      toast('P&L cleared');
+    } else {
+      await write('tickets/' + b.dataset.id, { closed: false, closedBy: null, closedAt: null, closedVia: null, reopenedBy: S.me, reopenedAt: now });
+      toast(b.dataset.id + ' reopened');
+    }
+  } catch (er) { b.disabled = false; b.closest('.rec')?.classList.remove('undone'); }
+});
+$('tickets').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-close]'); if (!b || !S.db || b.disabled) return;
+  const t = S.tickets.find((x) => tid(x.code) === b.dataset.close); if (!t) return;
+  const val = !t.closed;
+  b.setAttribute('aria-checked', String(val));
+  try { await write('tickets/' + b.dataset.close, { closed: val, closedBy: val ? S.me : null, closedAt: val ? new Date().toISOString() : null, closedVia: val ? 'app' : null }); toast(val ? t.code + ' marked closed' : t.code + ' reopened'); } catch (er) {}
+});
+$('tickets').addEventListener('change', async (e) => {
+  const s = e.target.closest('[data-assign]'); if (!s || !s.value) return;
+  const site = S.sites.find((x) => x.site === s.value);
+  try { await write('tickets/' + s.dataset.assign, { site: s.value, owner: site?.owner || '' }); toast('Site assigned'); } catch (er) {}
+});
+
+/* ---------- new month (owner) ---------- */
+$('newmonth').addEventListener('click', () => { $('monthbox').hidden = false; $('monthname').focus(); });
+$('monthcancel').addEventListener('click', () => { $('monthbox').hidden = true; });
+$('monthgo').addEventListener('click', async () => {
+  const label = $('monthname').value.trim(); if (!label) { $('monthname').focus(); return; }
+  $('monthgo').disabled = true;
+  try {
+    for (const s of S.sites) await write('sites/' + slug(s.site), { tasks: Object.fromEntries(TASKS.map(([k]) => [k, false])), taskLog: Object.fromEntries(TASKS.map(([k]) => [k, null])), pl: null, updatedBy: S.me, updatedAt: new Date().toISOString() });
+    await S.db.doc('meta/info').set({ ...(S.meta || {}), month: label });
+    $('monthbox').hidden = true; toast('New month started: ' + label);
+  } catch (e) {} finally { $('monthgo').disabled = false; }
+});
+
+/* ---------- ERP import (owner) ---------- */
+let pending = null;
+$('importbtn').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  const box = $('importbox'); box.hidden = false; box.classList.remove('err'); box.textContent = 'Reading ' + f.name + '…';
+  try {
+    if (!window.XLSX) throw new Error('The Excel reader did not load. Reload the page and try again.');
+    const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+    let rows = null;
+    for (const n of wb.SheetNames) { const r = XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: '' }); if (r.length && Object.keys(r[0]).some((k) => k.trim().toLowerCase() === 'ticket code')) { rows = r; break; } }
+    if (!rows) throw new Error('No sheet in this file has a "Ticket Code" column. Export the ticket list from the ERP and try again.');
+    pending = planImport(rows);
+    const p = pending;
+    box.innerHTML = `<b>${esc(f.name)}</b><ul><li>${p.add.length} new ticket${p.add.length === 1 ? '' : 's'}</li><li>${p.upd.length} existing ticket${p.upd.length === 1 ? '' : 's'} updated (${p.newlyClosed} now closed in the ERP)</li>${p.unmapped ? `<li style="color:var(--red)">${p.unmapped} with no matching site. You can assign them after the update.</li>` : ''}</ul>
+      <span>Tickets your team already closed stay closed.</span>
+      <div class="toolbar"><button class="btn primary" id="applyimp">Apply update</button><button class="btn" id="cancelimp">Cancel</button></div>`;
+  } catch (er) { box.classList.add('err'); box.textContent = er.message || 'Could not read that file.'; }
+});
+$('importbox').addEventListener('click', async (e) => {
+  if (e.target.id === 'cancelimp') { pending = null; $('importbox').hidden = true; }
+  if (e.target.id !== 'applyimp' || !pending) return;
+  e.target.disabled = true; const all = [...pending.add, ...pending.upd]; let n = 0;
+  try {
+    for (const [id, data, isNew] of all) { if (isNew) await S.db.doc('tickets/' + id).set(data); else await write('tickets/' + id, data); n++; e.target.textContent = `Saving ${n} of ${all.length}…`; }
+    await S.db.doc('meta/info').set({ ...(S.meta || {}), ticketsAsOf: todayStr(), lastImportBy: S.me, lastImportAt: new Date().toISOString() });
+    $('importbox').hidden = true; toast(`Updated ${all.length} tickets from the ERP file`);
+  } catch (er) { $('importbox').classList.add('err'); $('importbox').textContent = er?.code === 'quota_exceeded' ? 'The tracker is full. Ask Claude to clear old closed tickets.' : `Stopped after ${n} of ${all.length}. Upload the file again to finish.`; }
+  pending = null;
+});
+function planImport(rows) {
+  const get = (r, ...names) => { for (const k of Object.keys(r)) if (names.includes(k.trim().toLowerCase())) return r[k]; return ''; };
+  const toDate = (v) => { if (v instanceof Date && !isNaN(v)) return v.getFullYear() + '-' + String(v.getMonth()+1).padStart(2,'0') + '-' + String(v.getDate()).padStart(2,'0'); const s = String(v || '').trim(); let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0].slice(0,10); m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/); if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0'); return ''; };
+  const byId = Object.fromEntries(S.tickets.map((t) => [tid(t.code), t]));
+  const projectSite = {}; for (const t of S.tickets) if (t.project && t.site !== 'Unmapped') projectSite[t.project] = t.site;
+  const siteOwner = Object.fromEntries(S.sites.map((s) => [s.site, s.owner]));
+  const add = [], upd = []; let newlyClosed = 0, unmapped = 0;
+  for (const r of rows) {
+    const code = String(get(r, 'ticket code')).trim(); if (!code || code.includes('@draft')) continue;
+    const id = tid(code); const ex = byId[id];
+    const status = String(get(r, 'status', 'erp status')).trim();
+    const closedCol = get(r, 'closed');
+    const erpClosed = status.toLowerCase() === 'finished' || closedCol === true || String(closedCol).toUpperCase() === 'TRUE';
+    const project = String(get(r, 'project')).trim();
+    const site = String(get(r, 'site')).trim() || ex?.site || projectSite[project] || 'Unmapped';
+    const book = String(get(r, 'ticket book', 'raised by')).trim();
+    const data = {
+      code, site, owner: String(get(r, 'owner')).trim() || ex?.owner || siteOwner[site] || '',
+      raisedBy: /external|customer/i.test(book) ? 'Customer' : (book ? 'Internal' : (ex?.raisedBy || 'Internal')),
+      type: String(get(r, 'ticket type', 'type')).trim() || ex?.type || 'Not set',
+      erpStatus: status || ex?.erpStatus || '', target: toDate(get(r, 'target date')) || ex?.target || '',
+      department: String(get(r, 'department')).trim() || ex?.department || '',
+      responsible: String(get(r, 'responsible employee', 'responsible')).trim() || ex?.responsible || '',
+      description: String(get(r, 'description')).replace(/\s+/g, ' ').trim().slice(0, 2000) || ex?.description || '',
+      project: project || ex?.project || '', theme: String(get(r, 'theme')).trim() || ex?.theme || 'Not set'
+    };
+    if (data.site === 'Unmapped') unmapped++;
+    if (ex) { if (erpClosed && !ex.closed) { data.closed = true; data.closedAt = new Date().toISOString(); data.closedVia = 'erp'; newlyClosed++; } upd.push([id, data, false]); }
+    else { data.closed = erpClosed; add.push([id, data, true]); }
+  }
+  return { add, upd, newlyClosed, unmapped };
+}
+
+</script>
+
+
+<script type="module">
+// Connects the tracker page to the same Firebase project as the Android app.
+// Every screen above talks to `S.db` / `S.user`; this module provides them on top of Firestore,
+// so a tick on the web shows up on phones within a second, and the other way round.
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc,
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+const app = initializeApp({
+  apiKey: 'AIzaSyCbu5RqUhNc_hSUi0Z0k7wshJzg_Xs_agE',
+  authDomain: 'red-flag-tracker-9ed63.firebaseapp.com',
+  projectId: 'red-flag-tracker-9ed63',
+  storageBucket: 'red-flag-tracker-9ed63.firebasestorage.app',
+  messagingSenderId: '309954300058',
+});
+const auth = getAuth(app);
+let fs;
+try { fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+catch (e) { fs = initializeFirestore(app, {}); }
+
+const ME = { uid: null, name: '' };
+const KNOWN = {};      // person id -> display name, learned from the data itself
+let MEMBERS = {};      // owner only
+let CONFIG = null;
+
+// ---------- helpers the page's write code relies on ----------
+
+// The page writes nested objects and expects them merged. Firestore replaces whole maps on update,
+// so per-task maps (and a P&L amount change) are written as field paths instead.
+function toUpdate(data) {
+  const out = {};
+  for (const [k, v] of Object.entries(data)) {
+    const merge = v && typeof v === 'object' && !Array.isArray(v) &&
+      (k === 'tasks' || k === 'taskLog' || (k === 'pl' && !('status' in v)));
+    if (merge) for (const [kk, vv] of Object.entries(v)) out[k + '.' + kk] = vv;
+    else out[k] = v;
+  }
+  return out;
+}
+
+// Stamp names next to ids so the Android app (which shows names, not ids) can show who did it.
+function withNames(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
+  const r = {};
+  for (const [k, v] of Object.entries(o)) r[k] = withNames(v);
+  if ('by' in r) r.byName = r.by === ME.uid ? ME.name : (r.by ? KNOWN[r.by] || null : null);
+  for (const f of ['updatedBy', 'closedBy', 'reopenedBy', 'lastImportBy']) {
+    if (f in r) r[f + 'Name'] = r[f] === ME.uid ? ME.name : (r[f] ? KNOWN[r[f]] || null : null);
+  }
+  return r;
+}
+
+// Learn names from documents; give name-only entries (from the app or the backup) a stable id.
+function learn(o) {
+  if (!o || typeof o !== 'object') return o;
+  if (o.byName) { if (!o.by) o.by = 'name:' + o.byName; KNOWN[o.by] = o.byName; }
+  for (const f of ['updatedBy', 'closedBy', 'reopenedBy']) {
+    const n = o[f + 'Name'];
+    if (n) { if (!o[f]) o[f] = 'name:' + n; KNOWN[o[f]] = n; }
+  }
+  for (const v of Object.values(o)) if (v && typeof v === 'object') learn(v);
+  return o;
+}
+
+const mapErr = (e) => {
+  if (e?.code === 'permission-denied') throw Object.assign(new Error(e.message), { code: 'invalid_argument' });
+  if (e?.code === 'resource-exhausted') throw Object.assign(new Error(e.message), { code: 'quota_exceeded' });
+  throw e;
+};
+
+const dbShim = {
+  doc(path) {
+    const ref = doc(fs, path);
+    return {
+      update: (data) => updateDoc(ref, toUpdate(withNames(data))).catch(mapErr),
+      set: (data) => setDoc(ref, withNames(data)).catch(mapErr),
+      delete: () => deleteDoc(ref).catch(mapErr),
+    };
+  },
+};
+
+const userShim = {
+  async profiles(ids) {
+    return Object.fromEntries(ids.map((id) => [id, {
+      name: KNOWN[id] || MEMBERS[id]?.name || S.requests[id]?.accountName || (id === ME.uid ? ME.name : null),
+      email: MEMBERS[id]?.email || S.requests[id]?.email || null,
+    }]));
+  },
+};
+
+// ---------- live data ----------
+
+let subs = [];      // data listeners
+let roleSubs = [];  // membership / owner listeners
+const off = (list) => { list.forEach((u) => u()); list.length = 0; };
+const sync = { sites: true, tickets: true, pending: false };
+
+function showSync() {
+  const fromCache = sync.sites || sync.tickets;
+  const dot = $('syncdot'), txt = $('synctxt');
+  const state = !navigator.onLine ? 'off' : sync.pending ? 'saving' : fromCache ? 'connecting' : 'live';
+  dot.className = state === 'live' ? 'live' : state === 'off' ? 'off' : '';
+  txt.className = dot.className;
+  txt.textContent = { live: 'Live ·', off: 'Offline — changes sync when back online ·', saving: 'Saving…', connecting: 'Connecting…' }[state];
+  dot.title = txt.textContent;
+}
+addEventListener('online', showSync); addEventListener('offline', showSync);
+
+function startData() {
+  if (subs.length) return;
+  const onErr = (e) => {
+    if (e?.code === 'permission-denied') { S.sites = []; S.tickets = []; render(); }
+    else setTimeout(() => { off(subs); startData(); }, 3000);
+  };
+  subs.push(onSnapshot(collection(fs, 'sites'), { includeMetadataChanges: true }, (snap) => {
+    S.sites = snap.docs.map((d) => learn(d.data()));
+    sync.sites = snap.metadata.fromCache; sync.pending = snap.metadata.hasPendingWrites;
+    render(); showSync(); keepNamesList();
+  }, onErr));
+  subs.push(onSnapshot(collection(fs, 'tickets'), { includeMetadataChanges: true }, (snap) => {
+    S.tickets = snap.docs.map((d) => learn(d.data()));
+    sync.tickets = snap.metadata.fromCache; sync.pending = sync.pending || snap.metadata.hasPendingWrites;
+    render(); showSync();
+  }, onErr));
+  subs.push(onSnapshot(doc(fs, 'meta/info'), (d) => { S.meta = d.exists() ? d.data() : null; render(); }, onErr));
+}
+
+// The owner keeps the list of names on the "Who are you?" screen in step with the sites.
+function keepNamesList() {
+  if (!S.isOwner || !CONFIG) return;
+  const names = [...new Set(S.sites.map((s) => s.owner).filter(Boolean))].sort();
+  if (names.length && JSON.stringify(names) !== JSON.stringify(CONFIG.names || [])) updateDoc(doc(fs, 'config/app'), { names }).catch(() => {});
+}
+
+// ---------- sign-in gates ----------
+
+const gate = $('gate');
+const logo = '<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4" stroke="#fff" stroke-width="2"/><path d="M5 4h12l-2.5 4L17 12H5" fill="#F07A70" stroke="#F07A70" stroke-width="1.5"/></svg></div>';
+function showGate(html) { document.body.classList.add('gated'); gate.hidden = false; gate.innerHTML = `<div class="gatecard">${logo}<h1>Red Flag Tracker</h1>${html}</div>`; }
+function showMain() { document.body.classList.remove('gated'); gate.hidden = true; gate.innerHTML = ''; }
+const acct = () => `<p class="small">Signed in as ${esc(auth.currentUser?.email || '')}</p><button class="btn" data-g="out">Use another account</button>`;
+
+gate.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-g]'); if (!b) return;
+  const u = auth.currentUser;
+  b.disabled = true;
+  try {
+    if (b.dataset.g === 'in') {
+      const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
+      try { await signInWithPopup(auth, p); }
+      catch (er) { if (er?.code === 'auth/popup-blocked' || er?.code === 'auth/operation-not-supported-in-this-environment') await signInWithRedirect(auth, p); else throw er; }
+    } else if (b.dataset.g === 'out') await signOut(auth);
+    else if (b.dataset.g === 'own') await setDoc(doc(fs, 'config/app'), { ownerUid: u.uid, ownerName: u.displayName || u.email, names: [] });
+    else if (b.dataset.g === 'claim') await setDoc(doc(fs, 'requests/' + u.uid), { name: b.dataset.name, accountName: u.displayName || null, email: u.email || null, at: new Date().toISOString() });
+    else if (b.dataset.g === 'cancel') await deleteDoc(doc(fs, 'requests/' + u.uid));
+  } catch (er) {
+    b.disabled = false;
+    if (er?.code === 'auth/popup-closed-by-user' || er?.code === 'auth/cancelled-popup-request') return;
+    const msg = er?.code === 'auth/unauthorized-domain'
+      ? 'This website is not allowed to sign in yet. In Firebase › Authentication › Settings › Authorized domains, add ' + location.hostname + '.'
+      : 'Could not finish: ' + (er?.message || 'check your connection and try again.');
+    gate.querySelector('.err')?.remove();
+    gate.querySelector('.gatecard').insertAdjacentHTML('beforeend', `<p class="err">${esc(msg)}</p>`);
+  }
+});
+
+$('signout').addEventListener('click', () => signOut(auth));
+
+onAuthStateChanged(auth, (user) => {
+  off(subs); off(roleSubs);
+  Object.assign(S, { sites: [], tickets: [], members: {}, requests: {}, isOwner: false, myName: null, me: null, db: null, user: null });
+  if (!user) {
+    showGate('<p>Tick monthly tasks, follow tickets and spot red sites, together with your team. Same live data as the Android app.</p><button class="btn primary" data-g="in">Sign in with Google</button>');
+    return;
+  }
+  ME.uid = user.uid; S.me = user.uid; S.db = dbShim; S.user = userShim; S.canWrite = true;
+  showGate('<p>Loading…</p>');
+  let role = null;
+  roleSubs.push(onSnapshot(doc(fs, 'config/app'), (c) => {
+    CONFIG = c.exists() ? c.data() : null;
+    const next = !CONFIG ? 'none' : CONFIG.ownerUid === user.uid ? 'owner' : 'other';
+    if (next === role) { if (role === 'other' && !S.myName && !S.requests[user.uid]) claimGate(); return; }
+    role = next;
+    roleSubs.splice(1).forEach((u) => u());
+    off(subs);
+    if (role === 'none') showGate('<p>This tracker has not been set up yet. If you manage it, set yourself up as the owner. You will approve everyone else.</p><button class="btn primary" data-g="own">Set me up as owner</button>' + acct());
+    else if (role === 'owner') becomeOwner(user);
+    else watchMembership(user);
+  }, () => showGate('<p class="err">Could not reach the tracker. Check your connection and reload.</p>' + acct())));
+});
+
+function becomeOwner(user) {
+  S.isOwner = true; ME.name = user.displayName || user.email || 'Owner';
+  $('importbtn').hidden = false; $('newmonth').hidden = false;
+  roleSubs.push(onSnapshot(collection(fs, 'members'), (s) => {
+    MEMBERS = Object.fromEntries(s.docs.map((d) => [d.id, d.data()]));
+    S.members = MEMBERS; for (const [id, m] of Object.entries(MEMBERS)) if (m.name) KNOWN[id] = m.name;
+    render();
+  }));
+  roleSubs.push(onSnapshot(collection(fs, 'requests'), (s) => { S.requests = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }));
+  startData(); showMain(); render();
+}
+
+function claimGate() {
+  const names = CONFIG?.names || [];
+  showGate('<p><b>Who are you?</b> Pick your name. The owner approves it, then you can tick on your own sites.</p>' +
+    (names.length ? `<div class="names">${names.map((n) => `<button class="btn" data-g="claim" data-name="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : '<p class="small">The owner has not added any sites yet.</p>') + acct());
+}
+
+function watchMembership(user) {
+  $('importbtn').hidden = true; $('newmonth').hidden = true;
+  let reqSub = null;
+  roleSubs.push(onSnapshot(doc(fs, 'members/' + user.uid), (m) => {
+    const name = m.exists() ? m.data().name : null;
+    if (name) {
+      if (reqSub) { reqSub(); reqSub = null; }
+      const first = !S.myName;
+      S.myName = name; ME.name = name; KNOWN[user.uid] = name;
+      if (first) { let saved = ''; try { saved = localStorage.getItem('rf.owner') || ''; } catch (e) {} if (!saved) S.owner = name; }
+      startData(); showMain(); render();
+    } else {
+      S.myName = null; off(subs);
+      if (!reqSub) {
+        reqSub = onSnapshot(doc(fs, 'requests/' + user.uid), (r) => {
+          S.requests = r.exists() ? { [user.uid]: r.data() } : {};
+          if (r.exists()) showGate(`<p>You asked to join as <b>${esc(r.data().name)}</b>. The tracker opens as soon as the owner approves you.</p><button class="btn" data-g="cancel">I picked the wrong name</button>` + acct());
+          else claimGate();
+        });
+        roleSubs.push(reqSub);
+      }
+    }
+  }, () => claimGate()));
+}
+
+</script>
+</body></html>
